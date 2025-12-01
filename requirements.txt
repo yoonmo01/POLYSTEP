@@ -1,0 +1,32 @@
+# FastAPI & DB
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg2-binary
+pydantic
+pydantic-settings
+
+# LLM & API
+openai
+langchain
+python-dotenv
+
+# Crawling
+requests
+beautifulsoup4
+lxml
+browser-use
+playwright
+
+# Parsing
+pdfplumber
+PyPDF2
+olefile
+pyhwpx
+pillow
+pytesseract
+
+# Text Preprocessing
+regex
+dateparser
+python-dateutil
