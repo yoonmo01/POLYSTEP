@@ -30,3 +30,8 @@ pytesseract
 regex
 dateparser
 python-dateutil
+
+
+python-jose[cryptography]
+passlib[bcrypt]
+google-generativeai
