@@ -1,4 +1,11 @@
 # backend/app/main.py
+import sys
+import asyncio
+
+# ⬇️ 이 두 줄을 FastAPI, uvicorn import 보다 위에 두면 더 안전
+if sys.platform.startswith("win"):
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+    
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 

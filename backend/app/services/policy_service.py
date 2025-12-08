@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from ..schemas import PolicySearchRequest, PolicySearchResponse
 from ..models import User
-from .browser_service import search_policy_pages
+from .browser_service import search_policy_pages_async
 from .parsing_service import extract_texts_from_files
 from .llm_service import summarize_policy_and_make_steps
 
@@ -25,12 +25,12 @@ async def run_search_pipeline(
     7. Gemini로 요약 + step-by-step 생성
     8. 결과 응답으로 반환
     """
-    # 5. browser-use로 실시간 검색
+    # 5. browser-use로 실시간 검색 (async 호출)
     filters_dict: Dict[str, Any] | None = None
     if req.filters:
         filters_dict = req.filters.model_dump()
 
-    pages: List[Dict[str, Any]] = search_policy_pages(
+    pages: List[Dict[str, Any]] = await search_policy_pages_async(
         query=req.query,
         filters=filters_dict,
     )

@@ -11,7 +11,7 @@ from ..utils.file_utils import get_download_dir
 load_dotenv()
 
 
-async def _search_policy_pages_async(
+async def search_policy_pages_async(
     query: str,
     filters: Dict[str, Any] | None = None,
 ) -> List[Dict[str, Any]]:
@@ -31,7 +31,6 @@ async def _search_policy_pages_async(
         if filters.get("status"):
             filter_desc += f' 상태: {filters["status"]}.'
 
-    # 프롬프트 안에는 ``` 같은 코드펜스 사용하지 않음
     task = f"""
 너는 한국 청년 정책/장학금 정보를 찾는 브라우저 에이전트다.
 
@@ -66,13 +65,15 @@ async def _search_policy_pages_async(
 
     download_dir = get_download_dir()
 
+    # ✅ Browser-Use Cloud 사용 (로컬 크롬 띄우는 대신 클라우드 브라우저 사용)
     browser = Browser(
-        headless=True,
+        use_cloud=True,           # 🔴 기존: cloud=True (오류) → ✅ 정답: use_cloud=True
         accept_downloads=True,
         downloads_path=download_dir,
+        # profile_id는 UUID 형식이 아니라서 클라우드에서 422 에러 나므로 지정하지 않음
     )
 
-    # browser-use에서 제공하는 Gemini 래퍼
+    # ✅ Gemini(Google) LLM 사용
     llm = ChatGoogle(model="gemini-flash-latest")
 
     agent = Agent(
@@ -81,25 +82,16 @@ async def _search_policy_pages_async(
         browser=browser,
     )
 
+    # 에이전트 실행
     history = await agent.run(max_steps=50)
     final_text = history.final_result()
 
+    # 에이전트가 최종적으로 출력한 JSON 파싱
     try:
         data = json.loads(final_text)
         if isinstance(data, list):
             return data
         return []
     except Exception:
-        # 파싱 실패 시 안전하게 빈 리스트 반환
+        # JSON 형식이 아니면 일단 빈 리스트 반환
         return []
-
-
-def search_policy_pages(
-    query: str,
-    filters: Dict[str, Any] | None = None,
-) -> List[Dict[str, Any]]:
-    """
-    동기 코드(FastAPI 서비스 등)에서 호출하기 위한 wrapper.
-    FastAPI 엔드포인트가 async이면 가능하면 아래 비동기 함수를 직접 await 하는 게 더 좋다.
-    """
-    return asyncio.run(_search_policy_pages_async(query, filters))

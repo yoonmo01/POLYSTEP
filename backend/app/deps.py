@@ -1,19 +1,23 @@
 # backend/app/deps.py
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
 from .db import get_db
 from .models import User
 from .security import decode_token
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+# 🔁 OAuth2PasswordBearer → HTTPBearer 로 변경
+auth_scheme = HTTPBearer(auto_error=True)
 
 
 def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    credentials: HTTPAuthorizationCredentials = Depends(auth_scheme),
     db: Session = Depends(get_db),
 ) -> User:
+    # Authorization: Bearer <token>
+    token = credentials.credentials
+
     token_data = decode_token(token)
     if token_data is None or token_data.email is None:
         raise HTTPException(
@@ -27,4 +31,5 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
         )
+
     return user
