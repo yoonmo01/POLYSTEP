@@ -1,77 +1,117 @@
-# backend/app/schemas.py
+# app/schemas.py
 from datetime import datetime
-from typing import Optional, List
+from enum import Enum
+from typing import Any, List, Optional, Dict
 
 from pydantic import BaseModel, EmailStr
 
 
-# ---- Auth ----
-
-class UserBase(BaseModel):
-    email: EmailStr
-    full_name: Optional[str] = None
-
-
-class UserCreate(UserBase):
-    password: str
-
-
-class UserLogin(BaseModel):
-    email: EmailStr
-    password: str
-
-
-class UserOut(UserBase):
-    id: int
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
-
-
+# ===== Auth =====
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
 
 
 class TokenData(BaseModel):
-    user_id: Optional[int] = None
-    email: Optional[EmailStr] = None
+    user_id: int
 
 
-# ---- Policy Search ----
+class UserBase(BaseModel):
+    email: EmailStr
 
-class PolicySearchFilters(BaseModel):
-    category: Optional[str] = None  # 예: "주거", "일자리"
-    region: Optional[str] = None    # 예: "강원", "전국"
-    age: Optional[int] = None
-    status: Optional[str] = None    # 예: "대학생", "취준생"
+
+class UserCreate(UserBase):
+    password: str
+    full_name: Optional[str] = None
+
+
+class UserRead(UserBase):
+    id: int
+    full_name: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+# ===== Policy / Search (Fast Track) =====
+class BadgeStatus(str, Enum):
+    PASS = "PASS"
+    WARNING = "WARNING"
+    FAIL = "FAIL"
+
+
+class PolicyBase(BaseModel):
+    title: str
+    target_url: Optional[str] = None
+    raw_text: Optional[str] = None
+    age_min: Optional[int] = None
+    age_max: Optional[int] = None
+    region: Optional[str] = None
+    category: Optional[str] = None
+
+
+class PolicyRead(PolicyBase):
+    id: int
+    created_at: datetime | None = None
+
+    class Config:
+        from_attributes = True  # 🔥 SQLAlchemy ORM → Pydantic 변환 허용
 
 
 class PolicySearchRequest(BaseModel):
-    query: str
-    filters: Optional[PolicySearchFilters] = None
-
-
-class Step(BaseModel):
-    order: int
-    title: str
-    description: str
-
-
-class PolicySummary(BaseModel):
-    title: str
-    category: Optional[str] = None
+    query: Optional[str] = None
+    age: Optional[int] = None
     region: Optional[str] = None
-    summary: str
-    support_amount: Optional[str] = None
-    duration: Optional[str] = None
-    link: Optional[str] = None
+    category: Optional[str] = None
 
 
-class PolicySearchResponse(BaseModel):
-    query: str
-    filters: Optional[PolicySearchFilters] = None
-    summary: PolicySummary
-    steps: List[Step]
-    source_urls: List[str] = []
+class PolicySearchResult(BaseModel):
+    policy_id: int
+    title: str
+    badge_status: BadgeStatus
+    short_summary: str
+    has_verification_cache: bool
+    last_verified_at: Optional[datetime] = None
+
+
+# ===== Policy Verification (Deep Track) =====
+class PolicyVerificationStatusEnum(str, Enum):
+    PENDING = "PENDING"
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+
+
+class PolicyVerificationResponse(BaseModel):
+    status: PolicyVerificationStatusEnum
+    last_verified_at: Optional[datetime] = None
+    evidence_text: Optional[str] = None
+    extracted_criteria: Optional[Dict[str, Any]] = None
+    error_message: Optional[str] = None
+
+    # 🔥 ORM(PolicyVerification)에서 바로 변환 가능하게
+    class Config:
+        from_attributes = True
+
+
+class PolicyVerificationRequest(BaseModel):
+    force: bool = False  # 실패/오래된 캐시라도 강제 재검증 여부
+
+
+class PolicyVerificationStatusResponse(BaseModel):
+    status: PolicyVerificationStatusEnum
+    message: str
+    verification_id: Optional[int] = None
+    cached: bool = False
+    last_verified_at: Optional[datetime] = None
+
+
+# ===== Policy 상세 + 검증정보 묶음 =====
+class PolicyDetailResponse(BaseModel):
+    policy: PolicyRead
+    verification: Optional[PolicyVerificationResponse] = None

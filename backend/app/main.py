@@ -1,36 +1,39 @@
-# backend/app/main.py
-import sys
-import asyncio
-
-# ⬇️ 이 두 줄을 FastAPI, uvicorn import 보다 위에 두면 더 안전
-if sys.platform.startswith("win"):
-    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-    
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routers import auth, policies
+from app.config import settings
+from app.routers import auth, policies
 
-app = FastAPI(
-    title="PoliStep Backend",
-    version="0.1.0",
-)
-
-# CORS 설정 (필요에 맞게 수정)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # 배포 시에는 프론트 도메인만 허용하도록 수정
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# ✅ 여기 추가
+from app.db import Base, engine
+from app import models  # noqa: F401  # 모델 import 해서 Base에 모두 등록되도록
 
 
-@app.get("/")
-def read_root():
-    return {"message": "PoliStep API is running"}
+def create_app() -> FastAPI:
+    # ✅ 서버 시작할 때 테이블 자동 생성 (없으면 만들고, 있으면 무시)
+    Base.metadata.create_all(bind=engine)
+
+    app = FastAPI(title=settings.app_name)
+
+    # CORS 설정
+    origins: list[str] = []
+    if settings.frontend_origin:
+        origins.append(settings.frontend_origin)
+    origins.append("http://localhost:5173")
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # 라우터 등록
+    app.include_router(auth.router, prefix="/auth", tags=["auth"])
+    app.include_router(policies.router, prefix="/policies", tags=["policies"])
+
+    return app
 
 
-# 라우터 등록
-app.include_router(auth.router)
-app.include_router(policies.router)
+app = create_app()

@@ -1,41 +1,230 @@
-# backend/app/routers/policies.py
-from fastapi import APIRouter, Depends, HTTPException
+# app/routers/policies.py
+import asyncio
+from datetime import datetime  # 🔥 추가
+from typing import List
+
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    BackgroundTasks,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from sqlalchemy.orm import Session
 
-from .. import schemas
-from ..db import get_db
-from ..deps import get_current_user
-from ..models import PolicySearchLog, User
-from ..services.policy_service import run_search_pipeline
+from app.deps import get_db, get_current_user
+from app.schemas import (
+    PolicySearchRequest,
+    PolicySearchResult,
+    PolicyVerificationRequest,
+    PolicyVerificationStatusResponse,
+    PolicyVerificationResponse,
+    PolicyVerificationStatusEnum,
+    PolicyDetailResponse,          # 🔥 추가
+)
+from app.models import Policy, PolicyVerification, PolicyVerificationStatus
+from app.services.policy_service import PolicyService
+from app.services.policy_verification_service import PolicyVerificationService
 
-router = APIRouter(prefix="/policies", tags=["policies"])
+router = APIRouter()
 
 
-@router.post("/search", response_model=schemas.PolicySearchResponse)
-async def search_policies(
-    req: schemas.PolicySearchRequest,
+# ===== Fast Track: 검색 & Eligibility =====
+@router.get("/search", response_model=List[PolicySearchResult])
+def search_policies(
+    req: PolicySearchRequest = Depends(),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    user=Depends(get_current_user),
 ):
-    """
-    3~8 단계 전체를 수행:
-    - browser-use + Gemini로 실시간 검색/수집
-    - 파일 텍스트 처리
-    - Gemini로 요약 + step-by-step 생성
-    """
-    result = await run_search_pipeline(req, current_user, db)
+    return PolicyService.search_policies(db, req)
 
-    # 검색 로그 저장 (간단 버전)
-    log = PolicySearchLog(
-        user_id=current_user.id,
-        query=req.query,
-        category=req.filters.category if req.filters else None,
-        region=req.filters.region if req.filters else None,
-        summary_title=result.summary.title,
-        summary_text=result.summary.summary,
-        # steps_json은 나중에 필요하면 직렬화해서 저장
+
+@router.get("/{policy_id}", response_model=PolicyDetailResponse)
+def get_policy_detail(
+    policy_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    policy = db.get(Policy, policy_id)
+    if not policy:
+        raise HTTPException(status_code=404, detail="Policy not found")
+
+    v = (
+        db.query(PolicyVerification)
+        .filter(PolicyVerification.policy_id == policy_id)
+        .order_by(PolicyVerification.last_verified_at.desc().nullslast())
+        .first()
     )
-    db.add(log)
-    db.commit()
 
-    return result
+    # 🔥 여기서 그냥 ORM 객체를 반환해도 됨
+    # PolicyRead / PolicyVerificationResponse 둘 다 from_attributes=True라
+    # Pydantic이 알아서 변환해준다.
+    return {
+        "policy": policy,
+        "verification": v,
+    }
+
+
+# ===== Deep Track: REST + BackgroundTasks =====
+@router.post("/{policy_id}/verify", response_model=PolicyVerificationStatusResponse)
+def request_verification(
+    policy_id: int,
+    body: PolicyVerificationRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    policy = db.get(Policy, policy_id)
+    if not policy:
+        raise HTTPException(status_code=404, detail="Policy not found")
+
+    # 현재 최신 검증 레코드
+    v = (
+        db.query(PolicyVerification)
+        .filter(PolicyVerification.policy_id == policy_id)
+        .order_by(PolicyVerification.created_at.desc())
+        .first()
+    )
+
+    if v and v.status == PolicyVerificationStatus.PENDING.value and not body.force:
+        return PolicyVerificationStatusResponse(
+            status=PolicyVerificationStatusEnum.PENDING,
+            message="이미 검증이 진행 중입니다.",
+            verification_id=v.id,
+            cached=False,
+            last_verified_at=v.last_verified_at,
+        )
+
+    # 새로운 검증 레코드 준비 (또는 기존거 재사용)
+    v = PolicyVerificationService.get_or_create_verification(db, policy_id)
+    v.status = PolicyVerificationStatus.PENDING.value
+    v.error_message = None
+    db.add(v)
+    db.commit()
+    db.refresh(v)
+
+    # 🔥 여기서는 "id만" 넘긴다!
+    background_tasks.add_task(
+        PolicyVerificationService.run_verification_job_sync,
+        v.id,
+    )
+
+    return PolicyVerificationStatusResponse(
+        status=PolicyVerificationStatusEnum.PENDING,
+        message="검증 작업이 시작되었습니다.",
+        verification_id=v.id,
+        cached=False,
+        last_verified_at=v.last_verified_at,
+    )
+
+
+@router.get("/{policy_id}/verification", response_model=PolicyVerificationResponse)
+def get_verification_result(
+    policy_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    v = (
+        db.query(PolicyVerification)
+        .filter(PolicyVerification.policy_id == policy_id)
+        .order_by(PolicyVerification.created_at.desc())
+        .first()
+    )
+    if not v:
+        raise HTTPException(status_code=404, detail="Verification not found")
+
+    return PolicyVerificationResponse(
+        status=PolicyVerificationStatusEnum(v.status),
+        last_verified_at=v.last_verified_at,
+        evidence_text=v.evidence_text,
+        extracted_criteria=v.extracted_criteria,
+        error_message=v.error_message,
+    )
+
+
+# ===== Deep Track: WebSocket (실시간 로그) =====
+@router.websocket("/ws/{policy_id}/verify")
+async def ws_verify(websocket: WebSocket, policy_id: int):
+    await websocket.accept()
+
+    from app.db import SessionLocal
+    db = SessionLocal()
+
+    try:
+        policy = db.get(Policy, policy_id)
+        if not policy:
+            await websocket.send_json(
+                {"type": "error", "message": "Policy not found"}
+            )
+            await websocket.close()
+            return
+
+        v = PolicyVerificationService.get_or_create_verification(db, policy_id)
+        v.status = PolicyVerificationStatus.PENDING.value
+        v.error_message = None
+        db.add(v)
+        db.commit()
+        db.refresh(v)
+
+        async def log_callback(msg: str):
+            await websocket.send_json({"type": "log", "message": msg})
+
+        async def job():
+            from app.services.browser_service import BrowserService
+
+            try:
+                await log_callback("WebSocket 검증 작업 시작")
+
+                async def runner():
+                    navigation_path = v.navigation_path
+                    if navigation_path:
+                        return await BrowserService.verify_policy_with_playwright_shortcut(
+                            policy, navigation_path, log_callback
+                        )
+                    return await BrowserService.verify_policy_with_agent(
+                        policy, log_callback
+                    )
+
+                result = await runner()
+
+                v.status = PolicyVerificationStatus.SUCCESS.value
+                v.extracted_criteria = result.get("criteria")
+                v.evidence_text = result.get("evidence_text")
+                v.navigation_path = result.get("navigation_path")
+                v.last_verified_at = datetime.utcnow()
+                v.error_message = None
+
+                db.merge(v)
+                db.commit()
+
+                await websocket.send_json(
+                    {
+                        "type": "done",
+                        "status": "SUCCESS",
+                        "verification_id": v.id,
+                        "extracted_criteria": v.extracted_criteria,
+                        "evidence_text": v.evidence_text,
+                    }
+                )
+            except Exception as e:
+                v.status = PolicyVerificationStatus.FAILED.value
+                v.error_message = str(e)
+                v.last_verified_at = datetime.utcnow()
+                db.merge(v)
+                db.commit()
+
+                await websocket.send_json(
+                    {
+                        "type": "done",
+                        "status": "FAILED",
+                        "error": str(e),
+                    }
+                )
+            finally:
+                await websocket.close()
+                db.close()
+
+        asyncio.create_task(job())
+    except WebSocketDisconnect:
+        db.close()

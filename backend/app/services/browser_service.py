@@ -1,104 +1,258 @@
-# backend/app/services/browser_service.py
+# app/services/browser_service.py
+
 import asyncio
 import json
-from typing import Any, Dict, List
+import logging
+from typing import Any, Dict, List, Optional, Callable, Awaitable
 
 from dotenv import load_dotenv
+
 from browser_use import Agent, Browser, ChatGoogle
 
-from ..utils.file_utils import get_download_dir
+from app.utils.file_utils import ensure_download_dir
+from app.models import Policy
 
 load_dotenv()
+logger = logging.getLogger(__name__)
+
+# WebSocket 쪽에서는 async 콜백을 쓸 수 있으니까 이렇게 타입 정의
+AsyncLogCallback = Optional[Callable[[str], Awaitable[None]]]
 
 
-async def search_policy_pages_async(
-    query: str,
-    filters: Dict[str, Any] | None = None,
-) -> List[Dict[str, Any]]:
+class BrowserService:
     """
-    browser-use + ChatGoogle(Gemini)를 사용해서
-    정책 관련 페이지를 탐색하고,
-    title / url / raw_text / downloaded_files 리스트를 반환.
+    browser-use + Gemini를 사용해서
+    실제 브라우저를 돌려 정책 자격 요건을 검증하는 서비스.
+    - REST Deep Track: verify_policy_sync() (BackgroundTasks 에서 호출)
+    - WebSocket Deep Track: verify_policy_with_agent / verify_policy_with_playwright_shortcut
     """
-    filter_desc = ""
-    if filters:
-        if filters.get("category"):
-            filter_desc += f' 분야: {filters["category"]}.'
-        if filters.get("region"):
-            filter_desc += f' 지역: {filters["region"]}.'
-        if filters.get("age"):
-            filter_desc += f' 나이: {filters["age"]}세.'
-        if filters.get("status"):
-            filter_desc += f' 상태: {filters["status"]}.'
 
-    task = f"""
-너는 한국 청년 정책/장학금 정보를 찾는 브라우저 에이전트다.
+    # ======================
+    # 공통: Agent 실행 헬퍼
+    # ======================
+    @staticmethod
+    async def _run_agent(
+        task: str,
+        log_callback: AsyncLogCallback = None,
+    ) -> Dict[str, Any]:
+        """
+        browser-use Agent 한 번 실행하고
+        최종 결과를 JSON 형태로 파싱해서 리턴.
+        """
+        if log_callback:
+            await log_callback("브라우저 세션 준비 중...")
 
-[사용자 조건]
-- 검색어: "{query}"
-- 추가 조건: {filter_desc if filter_desc else "명시된 추가 조건 없음"}
+        downloads_dir = ensure_download_dir()
+        logger.info(f"[BrowserService] Using downloads_dir={downloads_dir}")
 
-[중요 규칙 — 반드시 아래를 지켜라]
-1. 반드시 이 웹사이트만 사용하라:
-   ▶ https://www.youthcenter.go.kr
+        # 🔥 중요: downloads_path 로 써야 함 (download_path 아님!)
+        browser = Browser(
+            headless=False,
+            downloads_path=downloads_dir,
+        )
 
-2. 네이버, 구글, 다음 등 외부 검색 엔진은 절대 사용하지 마라.
-3. 새로운 탭을 열어도 반드시 https://www.youthcenter.go.kr 내부에서만 탐색하라.
-4. 외부 링크가 뜨면 클릭하지 말고 무시하라.
+        # Gemini (Google API 키는 .env 의 GOOGLE_API_KEY 사용)
+        llm = ChatGoogle(model="gemini-2.5-flash-lite")
 
-[요구사항]
-1. https://www.youthcenter.go.kr 사이트 내부 검색 기능을 사용하여 관련 정책 공고 페이지를 최대 3개 찾으라.
-2. 각 정책 상세 페이지에서 다음 정보를 추출하라:
-   - 정책 이름 또는 페이지 제목: title
-   - 페이지 URL: url
-   - 본문에서 정책 내용을 최대한 많이 추출한 텍스트: raw_text
-   - 첨부파일(HWP, PDF, 이미지 등)이 있다면 다운로드하고 downloaded_files에 저장 경로를 기록하라.
+        agent = Agent(
+            task=task,
+            llm=llm,
+            browser=browser,
+        )
 
-3. 최종 출력은 아래 JSON 배열 형식 ONLY:
+        if log_callback:
+            await log_callback("에이전트 실행 시작...")
 
-예시:
-[
-  {{
-    "title": "정책 또는 페이지 제목",
-    "url": "페이지 URL",
-    "raw_text": "본문 텍스트",
-    "downloaded_files": ["파일경로1", "파일경로2"]
-  }}
-]
+        history = await agent.run()
 
-4. 아무 페이지도 찾지 못하면 빈 배열([])만 출력하라.
-5. 자연어 설명, 불필요한 문장, JSON 외 형식은 절대 출력하지 마라. JSON ONLY.
-"""
+        if log_callback:
+            await log_callback("에이전트 실행 완료, 결과 파싱 중...")
 
-    download_dir = get_download_dir()
+        # browser-use history 에 final_result()가 있다고 가정
+        try:
+            final_text = history.final_result()  # type: ignore[attr-defined]
+        except Exception:
+            final_text = str(history)
 
-    # ✅ Browser-Use Cloud 사용 (로컬 크롬 띄우는 대신 클라우드 브라우저 사용)
-    browser = Browser(
-        use_cloud=True,           # 🔴 기존: cloud=True (오류) → ✅ 정답: use_cloud=True
-        accept_downloads=True,
-        downloads_path=download_dir,
-        # profile_id는 UUID 형식이 아니라서 클라우드에서 422 에러 나므로 지정하지 않음
-    )
+        logger.info(f"[BrowserService] final_result text snippet: {final_text[:500]}")
 
-    # ✅ Gemini(Google) LLM 사용
-    llm = ChatGoogle(model="gemini-flash-latest")
+        try:
+            parsed = json.loads(final_text)
+        except Exception:
+            # JSON 포맷이 아니면 raw 텍스트로라도 돌려주기
+            parsed = {"raw": final_text}
 
-    agent = Agent(
-        task=task,
-        llm=llm,
-        browser=browser,
-    )
+        criteria = (
+            parsed.get("criteria")
+            or parsed.get("extracted_criteria")
+            or {}
+        )
+        evidence_text = (
+            parsed.get("evidence_text")
+            or parsed.get("evidence")
+            or final_text
+        )
+        navigation_path = parsed.get("navigation_path") or []
 
-    # 에이전트 실행
-    history = await agent.run(max_steps=50)
-    final_text = history.final_result()
+        return {
+            "criteria": criteria,
+            "evidence_text": evidence_text,
+            "navigation_path": navigation_path,
+        }
 
-    # 에이전트가 최종적으로 출력한 JSON 파싱
-    try:
-        data = json.loads(final_text)
-        if isinstance(data, list):
-            return data
-        return []
-    except Exception:
-        # JSON 형식이 아니면 일단 빈 리스트 반환
+    # ======================
+    # 1차: 탐색형 Agent 모드
+    # ======================
+    @staticmethod
+    async def verify_policy_with_agent(
+        policy: Policy,
+        log_callback: AsyncLogCallback = None,
+    ) -> Dict[str, Any]:
+        """
+        navigation_path 없이 처음부터 페이지를 탐색하면서
+        '지원대상/신청자격/선정기준'을 찾아 자격 요건을 추출하는 모드.
+        """
+        title = policy.title or ""
+        url = policy.target_url or ""
+
+        task = f"""
+너는 대한민국 청년정책을 분석하는 전문 에이전트야.
+
+아래 정책의 공식 안내 페이지에 접속해서,
+특히 '지원대상', '신청자격', '선정기준'을 찾아서 정리해야 한다.
+
+- 정책 제목: {title}
+- 접속해야 할 URL: {url}
+
+작업 단계:
+1. 지정된 URL로 이동한다.
+2. 팝업/알림 등이 뜨면 모두 닫는다.
+3. 페이지에서 '지원대상', '신청자격', '선정기준', '지원내용' 과 관련된 섹션을 찾는다.
+4. 해당 섹션의 텍스트를 최대한 많이 수집한다.
+5. 수집한 텍스트를 기반으로 아래 JSON 형식으로만 최종 답변을 출력한다.
+
+반드시 아래 JSON 형식만 출력해라. (추가 설명/문장 금지)
+
+{{
+  "criteria": {{
+    "age": "연령 요건을 한국어로 간단 요약. 없으면 '제한 없음'이라고 적기.",
+    "region": "거주지/주소 요건이 있으면 요약, 없으면 '제한 없음'.",
+    "income": "소득/재산 기준이 있으면 요약, 없으면 '제한 없음'.",
+    "employment": "재직/구직/창업 등 고용 상태 기준이 있으면 요약, 없으면 '제한 없음'.",
+    "other": "기타 주요 자격요건을 한 줄로 정리. 없으면 '없음'."
+  }},
+  "evidence_text": "위 기준을 판단하는 근거가 된 원문 문장을 한국어로 여러 줄 이어서 붙여넣기.",
+  "navigation_path": []
+}}
+        """.strip()
+
+        return await BrowserService._run_agent(task, log_callback)
+
+    # =================================
+    # 2차: navigation_path 재사용 모드
+    # =================================
+    @staticmethod
+    async def verify_policy_with_playwright_shortcut(
+        policy: Policy,
+        navigation_path: List[Dict[str, Any]],
+        log_callback: AsyncLogCallback = None,
+    ) -> Dict[str, Any]:
+        """
+        이전 실행에서 저장한 navigation_path 정보를 힌트로 줘서
+        더 빠르게 자격 요건 섹션에 도달하려는 모드.
+        (지금은 '힌트 기반 Agent' 정도로만 구현해두고,
+         나중에 진짜 Playwright 액션 재생으로 바꿔도 됨)
+        """
+        title = policy.title or ""
+        url = policy.target_url or ""
+
+        path_hint = json.dumps(navigation_path, ensure_ascii=False)
+
+        task = f"""
+너는 대한민국 청년정책을 분석하는 전문 에이전트야.
+
+아래 정책의 공식 안내 페이지에 접속해서,
+'지원대상', '신청자격', '선정기준' 섹션을 빠르게 찾아야 한다.
+
+- 정책 제목: {title}
+- 접속해야 할 URL: {url}
+
+이전 실행에서 사용했던 네비게이션 경로 힌트가 있다.  
+가능하면 이 힌트를 참고해서 비슷한 경로로 빠르게 이동하되,
+페이지 구조가 바뀌었으면 유연하게 다시 탐색해라.
+
+이전 navigation_path 힌트:
+{path_hint}
+
+작업 단계:
+1. URL로 이동한다.
+2. 팝업/알림이 뜨면 닫는다.
+3. 힌트에 있는 경로를 참고해서 비슷한 버튼/탭/링크를 클릭해본다.
+4. 그래도 안 보이면 직접 '지원대상', '신청자격', '선정기준'과 비슷한 텍스트를 찾아 스크롤/검색한다.
+5. 관련 섹션 텍스트를 수집한 뒤 아래 JSON 형식으로만 결과를 출력한다.
+
+반드시 아래 JSON 형식만 출력해라. (추가 설명/문장 금지)
+
+{{
+  "criteria": {{
+    "age": "연령 요건 요약 또는 '제한 없음'.",
+    "region": "거주지 요건 요약 또는 '제한 없음'.",
+    "income": "소득/재산 기준 요약 또는 '제한 없음'.",
+    "employment": "고용 상태 기준 요약 또는 '제한 없음'.",
+    "other": "기타 주요 자격 요건 한 줄 또는 '없음'."
+  }},
+  "evidence_text": "근거가 된 원문 텍스트를 한국어로 여러 줄 이어서 붙여넣기.",
+  "navigation_path": []
+}}
+        """.strip()
+
+        if log_callback:
+            await log_callback("Playwright 지름길(힌트 기반) 모드로 검증 시작...")
+
+        return await BrowserService._run_agent(task, log_callback)
+
+    # =========================================
+    # REST Deep Track용: 동기 wrapper (필수!)
+    # =========================================
+    @staticmethod
+    def verify_policy_sync(
+        policy: Policy,
+        navigation_path: Optional[List[Dict[str, Any]]] = None,
+        log_callback: Optional[Callable[[str], Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        PolicyVerificationService.run_verification_job_sync() 에서 호출되는 동기 함수.
+        내부에서 asyncio.run()으로 위의 async 함수들을 실행한다.
+        (BackgroundTasks는 sync 함수도 잘 실행시켜 주므로 이 형태가 편함)
+        """
+
+        async def _runner() -> Dict[str, Any]:
+            # REST BackgroundTask에서는 WebSocket처럼 async 콜백이 없으니
+            # 여기서는 log_callback은 그냥 무시하거나 print만 써도 된다.
+            if navigation_path:
+                return await BrowserService.verify_policy_with_playwright_shortcut(
+                    policy,
+                    navigation_path,
+                    None,
+                )
+            return await BrowserService.verify_policy_with_agent(policy, None)
+
+        # BackgroundTasks 내에서는 asyncio.run() 사용해도 됨 (별도 context)
+        return asyncio.run(_runner())
+
+    # =================================
+    # (옵션) 나중용: 검색용 더미 함수
+    # =================================
+    @staticmethod
+    async def search_policy_pages_async(
+        query: str,
+        filters: Dict[str, Any] | None = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        나중에 온통청년 통합검색 같은 곳을 browser-use로 돌릴 때 사용할 자리.
+        지금은 Deep Track 검증에 집중하므로 더미 구현으로 둔다.
+        """
+        logger.info(
+            f"[BrowserService] search_policy_pages_async called query={query}, filters={filters}"
+        )
         return []
