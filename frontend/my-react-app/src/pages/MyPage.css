@@ -1,0 +1,346 @@
+.mypage {
+  min-height: 100vh;
+  padding: 4rem 1.5rem 3rem;
+  background: radial-gradient(circle at top left, #1e3a8a 0, #5f6aa2 55%, #bcbcbc 100%);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.mypage-shell {
+  width: 100%;
+  max-width: 1100px;
+}
+
+/* 헤더 */
+.mypage-header {
+  margin-bottom: 1.6rem;
+  color: #e5e7eb;
+}
+
+.mypage-title {
+  font-size: 1.5rem;
+  line-height: 1.35;
+  color: #f9fafb;
+}
+
+.mypage-subtitle {
+  margin-top: 0.4rem;
+  font-size: 0.9rem;
+  color: #9ca3af;
+}
+
+/* 공통 카드 스타일 */
+.mypage-card {
+  background: rgba(15, 23, 42, 0.97);
+  border-radius: 20px;
+  padding: 1.6rem 1.7rem;
+  box-shadow:
+    0 22px 50px rgba(15, 23, 42, 0.95),
+    0 0 0 1px rgba(148, 163, 184, 0.25);
+  border: 1px solid rgba(148, 163, 184, 0.42);
+  color: #e5e7eb;
+}
+
+.mypage-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin-bottom: 1rem;
+}
+
+.mypage-card-head h2 {
+  font-size: 1rem;
+  color: #f9fafb;
+}
+
+/* 상단 2열 레이아웃 */
+.mypage-top-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.1fr);
+  gap: 1.4rem;
+}
+
+/* 프로필 카드 */
+.profile-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem 1.2rem;
+}
+
+.profile-info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.profile-info-item .label {
+  font-size: 0.78rem;
+  color: #9ca3af;
+}
+
+.profile-info-item .value {
+  font-size: 0.9rem;
+  color: #e5e7eb;
+}
+
+.profile-hint {
+  margin-top: 0.9rem;
+  font-size: 0.78rem;
+  color: #9ca3af;
+}
+
+/* 버튼들 */
+.profile-edit-btn,
+.small-link-btn {
+  padding: 0.45rem 0.95rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f9fafb;
+  font-size: 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+  backdrop-filter: blur(6px);
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    transform 0.15s ease,
+    box-shadow 0.18s ease;
+}
+
+.profile-edit-btn:hover,
+.small-link-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.48);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+}
+
+/* 최근 추천 카드 */
+.recent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.recent-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.96);
+  border: 1px solid rgba(51, 65, 85, 0.9);
+}
+
+.recent-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.recent-title {
+  font-size: 0.9rem;
+  color: #f9fafb;
+}
+
+.recent-meta {
+  font-size: 0.78rem;
+  color: #9ca3af;
+  display: flex;
+  gap: 0.3rem;
+  align-items: center;
+}
+
+.recent-status {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid rgba(191, 219, 254, 0.8);
+  background: rgba(15, 23, 42, 0.9);
+  color: #bfdbfe;
+}
+
+/* 빈 상태 */
+.empty-block {
+  font-size: 0.8rem;
+  color: #9ca3af;
+  padding: 0.9rem 0.3rem 0.3rem;
+}
+
+/* 하단 영역 */
+.mypage-bottom {
+  margin-top: 1.4rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: 1.4rem;
+}
+
+/* 히스토리 리스트 */
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.2rem;
+}
+
+.history-item .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #60a5fa;
+}
+
+.history-texts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.history-title {
+  font-size: 0.86rem;
+  color: #e5e7eb;
+}
+
+.history-meta {
+  font-size: 0.78rem;
+  color: #9ca3af;
+}
+
+/* CTA 카드 */
+.mypage-cta-card {
+  background: radial-gradient(circle at top left, rgba(59, 130, 246, 0.25), rgba(15, 23, 42, 0.98));
+  border-radius: 20px;
+  padding: 1.7rem 1.7rem;
+  box-shadow:
+    0 24px 55px rgba(15, 23, 42, 0.95),
+    0 0 0 1px rgba(148, 163, 184, 0.3);
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  color: #e5e7eb;
+}
+
+.mypage-cta-card h2 {
+  font-size: 1rem;
+  color: #f9fafb;
+  margin-bottom: 0.4rem;
+}
+
+.mypage-cta-card p {
+  font-size: 0.84rem;
+  color: #e5e7eb;
+}
+
+.mypage-cta-actions {
+  margin-top: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+/* CTA 버튼들 */
+.mypage-primary-btn,
+.mypage-secondary-btn {
+  border-radius: 999px;
+  padding: 0.6rem 1.4rem;
+  font-size: 0.84rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  white-space: nowrap;
+  transition:
+    background 0.16s ease,
+    transform 0.12s ease,
+    box-shadow 0.16s ease,
+    border-color 0.16s ease;
+}
+
+/* 메인 CTA */
+.mypage-primary-btn {
+  background: linear-gradient(to right, #2563eb, #4f46e5);
+  color: #f9fafb;
+  border: 1px solid rgba(191, 219, 254, 0.9);
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.95);
+}
+
+.mypage-primary-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 22px 44px rgba(15, 23, 42, 1);
+}
+
+/* 서브 CTA */
+.mypage-secondary-btn {
+  background: rgba(15, 23, 42, 0.9);
+  color: #e5e7eb;
+  border: 1px solid rgba(148, 163, 184, 0.8);
+}
+
+.mypage-secondary-btn:hover {
+  background: rgba(30, 64, 175, 0.9);
+  border-color: rgba(219, 234, 254, 1);
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.9);
+}
+
+/* 모바일 대응 */
+.only-mobile {
+  display: none;
+}
+
+@media (max-width: 960px) {
+  .mypage-top-grid,
+  .mypage-bottom {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .mypage {
+    padding: 4.25rem 1.2rem 2.5rem;
+  }
+
+  .mypage-title {
+    font-size: 1.3rem;
+  }
+
+  .mypage-subtitle {
+    font-size: 0.85rem;
+  }
+
+  .mypage-card,
+  .mypage-cta-card {
+    padding: 1.4rem 1.4rem;
+    border-radius: 18px;
+  }
+
+  .profile-info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mypage-cta-actions {
+    flex-direction: column;
+  }
+
+  .mypage-primary-btn,
+  .mypage-secondary-btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .only-mobile {
+    display: inline;
+  }
+}

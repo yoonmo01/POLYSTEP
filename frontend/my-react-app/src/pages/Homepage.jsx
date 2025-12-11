@@ -18,11 +18,8 @@ const HomePage = () => {
       <header className="home-header">
         <div className="home-logo">POLYSTEP</div>
         <nav className="home-nav">
-          <Link to="/login" className="nav-link">
-            로그인
-          </Link>
-          <Link to="/signup" className="nav-link">
-            회원가입
+          <Link to="/mypage" className="nav-link">
+            마이페이지
           </Link>
         </nav>
       </header>
@@ -42,7 +39,7 @@ const HomePage = () => {
           </p>
 
           <div className="home-actions">
-            <Link to="/question" className="btn btn-primary">
+            <Link to="/profile" className="btn btn-primary">
               나에게 맞는 정책 찾기
             </Link>
             <Link to="/about" className="btn btn-ghost">

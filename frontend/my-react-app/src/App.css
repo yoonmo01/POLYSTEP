@@ -1,3 +1,81 @@
+/* ===== 글로벌 헤더: 홈페이지와 어울리는 파란 그라데이션 ===== */
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background-image: linear-gradient(
+    to right,
+    rgba(5, 10, 35, 0.96),
+    rgba(12, 52, 112, 0.96)
+  );
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.app-nav {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0.7rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* 로고: 왼쪽 흰색 텍스트 */
+.app-logo {
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #ffffff;
+  text-decoration: none;
+}
+
+.app-logo:hover {
+  opacity: 0.9;
+}
+
+/* 오른쪽 버튼 영역 */
+.app-nav-right {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.app-nav-btn:hover {
+  background: rgba(37, 99, 235, 0.98);
+  border-color: rgba(219, 234, 254, 1);
+  transform: translateY(-1px);
+  box-shadow: 0 14px 26px rgba(15, 23, 42, 0.65);
+}
+
+.app-nav-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 6px 12px rgba(15, 23, 42, 0.5);
+}
+
+/* 모바일 대응 */
+@media (max-width: 640px) {
+  .app-nav {
+    padding: 0.6rem 1rem;
+  }
+
+  .app-logo {
+    font-size: 1rem;
+  }
+
+  .app-nav-right {
+    gap: 0.45rem;
+  }
+
+  .app-nav-btn {
+    padding: 0.35rem 0.8rem;
+    font-size: 0.8rem;
+  }
+}
+
+/* 전체 앱 레이아웃 및 공통 스타일 */
 * {
   box-sizing: border-box;
 }
@@ -12,19 +90,6 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-}
-
-.app-header {
-  height: 60px;
-  padding: 0 24px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: #ffffff;
-  border-bottom: 1px solid #e0e0e0;
-  position: sticky;
-  top: 0;
-  z-index: 10;
 }
 
 .logo {
@@ -96,36 +161,6 @@ button:hover,
   display: flex;
   justify-content: center;
   gap: 16px;
-}
-
-/* Login */
-.auth-form {
-  max-width: 360px;
-  margin-top: 40px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.auth-form label {
-  display: flex;
-  flex-direction: column;
-  font-size: 14px;
-  gap: 4px;
-}
-
-.auth-form input {
-  padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid #ccc;
-}
-
-/* Signup */
-.checkbox-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
 }
 
 /* Main */
