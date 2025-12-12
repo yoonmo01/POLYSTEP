@@ -78,6 +78,15 @@ class PolicySearchResult(BaseModel):
     short_summary: str
     has_verification_cache: bool
     last_verified_at: Optional[datetime] = None
+    # 🔥 카드에 바로 쓸 메타 데이터들
+    category: Optional[str] = None         # ex) "취업·일자리"
+    category_l: Optional[str] = None       # ex) "일자리"
+    category_m: Optional[str] = None       # ex) "창업"
+    region: Optional[str] = None           # ex) "경기도"
+    age_min: Optional[int] = None
+    age_max: Optional[int] = None
+    apply_period_type: Optional[str] = None    # "상시모집" / "기간모집"
+    biz_end: Optional[str] = None              # "YYYYMMDD" 문자열
 
 
 # ===== Policy Verification (Deep Track) =====

@@ -89,6 +89,14 @@ class PolicyService:
                     short_summary=short_summary,
                     has_verification_cache=bool(v and v.status == "SUCCESS"),
                     last_verified_at=v.last_verified_at if v else None,
+                    category=p.category,
+                    category_l=p.category_l,
+                    category_m=p.category_m,
+                    region=p.region,
+                    age_min=p.age_min,
+                    age_max=p.age_max,
+                    apply_period_type=p.apply_period_type,
+                    biz_end=p.biz_end,
                 )
             )
         return results
