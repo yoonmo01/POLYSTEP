@@ -88,6 +88,14 @@ class PolicySearchResult(BaseModel):
     apply_period_type: Optional[str] = None    # "상시모집" / "기간모집"
     biz_end: Optional[str] = None              # "YYYYMMDD" 문자열
 
+class SimilarPoliciesResponse(BaseModel):
+    """
+    기준 정책 하나 + 유사 정책들 5개 정도를 한 번에 내려주는 응답 스키마.
+    카드 UI 재사용을 위해 PolicySearchResult를 그대로 사용한다.
+    """
+    base_policy: PolicySearchResult
+    similar_policies: List[PolicySearchResult]
+
 
 # ===== Policy Verification (Deep Track) =====
 class PolicyVerificationStatusEnum(str, Enum):

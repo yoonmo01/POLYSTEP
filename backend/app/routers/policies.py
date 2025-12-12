@@ -1,7 +1,7 @@
 # app/routers/policies.py
 import asyncio
 from datetime import datetime  # 🔥 추가
-from typing import List
+from typing import List, Optional
 
 from fastapi import (
     APIRouter,
@@ -22,6 +22,7 @@ from app.schemas import (
     PolicyVerificationResponse,
     PolicyVerificationStatusEnum,
     PolicyDetailResponse,          # 🔥 추가
+    SimilarPoliciesResponse,
 )
 from app.models import Policy, PolicyVerification, PolicyVerificationStatus
 from app.services.policy_service import PolicyService
@@ -39,6 +40,23 @@ def search_policies(
 ):
     return PolicyService.search_policies(db, req)
 
+# ✅ 검색 → 기준 + 유사 5개 한 번에 받기
+@router.get("/search_with_similar", response_model=SimilarPoliciesResponse)
+def search_policies_with_similar(
+    req: PolicySearchRequest = Depends(),
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """
+    사용자가 처음 검색했을 때 쓰는 엔드포인트.
+
+    - query / age / region / category 로 검색
+    - 가장 잘 맞는 기준 정책 1개 + 그와 유사한 정책 5개를 한 번에 반환
+    """
+    result = PolicyService.search_policies_with_similars(db, req)
+    if result is None:
+        raise HTTPException(status_code=404, detail="No policies found")
+    return result
 
 @router.get("/{policy_id}", response_model=PolicyDetailResponse)
 def get_policy_detail(
@@ -65,6 +83,37 @@ def get_policy_detail(
         "verification": v,
     }
 
+
+
+# ===== Fast Track: 기준 정책 + 유사 정책 5개 =====
+@router.get("/{policy_id}/similar", response_model=SimilarPoliciesResponse)
+def get_similar_policies(
+    policy_id: int,
+    age: Optional[int] = None,
+    region: Optional[str] = None,
+    category: Optional[str] = None,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """
+    기준이 되는 정책(policy_id) 하나와,
+    그와 유사한 정책 5개 정도를 함께 반환한다.
+
+    - age, region, category는 사용자의 조건(검색 조건)을 그대로 받아서
+      Fast Track LLM 평가에 다시 사용한다.
+    """
+    req = PolicySearchRequest(
+        query=None,
+        age=age,
+        region=region,
+        category=category,
+    )
+
+    result = PolicyService.get_policy_with_similars(db, policy_id, req)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Policy not found")
+
+    return result
 
 # ===== Deep Track: REST + BackgroundTasks =====
 @router.post("/{policy_id}/verify", response_model=PolicyVerificationStatusResponse)
