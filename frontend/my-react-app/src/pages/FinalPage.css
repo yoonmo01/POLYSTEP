@@ -1,0 +1,275 @@
+.final-page {
+  min-height: 100vh;
+  padding: 4rem 1.5rem 3rem;
+  background: radial-gradient(circle at top left, #1e3a8a 0, #5f6aa2 55%, #bcbcbc 100%);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.final-shell {
+  width: 100%;
+  max-width: 880px;
+}
+
+/* 헤더 */
+.final-header {
+  margin-bottom: 1.6rem;
+  color: #e5e7eb;
+}
+
+.final-step {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.16rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.22);
+  color: #bfdbfe;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.final-title {
+  margin-top: 0.9rem;
+  font-size: 1.5rem;
+  line-height: 1.35;
+  color: #f9fafb;
+}
+
+.final-subtitle {
+  margin-top: 0.4rem;
+  font-size: 0.9rem;
+  color: #9ca3af;
+}
+
+/* 메인 섹션 래퍼 */
+.final-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1.4rem;
+}
+
+/* 상단 메인 카드 */
+.final-hero-card {
+  background: radial-gradient(circle at top left, rgba(59, 130, 246, 0.25), rgba(15, 23, 42, 0.98));
+  border-radius: 24px;
+  padding: 1.9rem 2rem 1.7rem;
+  box-shadow:
+    0 26px 60px rgba(15, 23, 42, 0.95),
+    0 0 0 1px rgba(148, 163, 184, 0.3);
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  color: #e5e7eb;
+  text-align: left;
+}
+
+.final-icon-circle {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(191, 219, 254, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  margin-bottom: 0.7rem;
+}
+
+.final-hero-label {
+  font-size: 0.78rem;
+  color: #bfdbfe;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+.final-hero-title {
+  margin-top: 0.3rem;
+  font-size: 1.4rem;
+  color: #f9fafb;
+}
+
+.final-hero-meta {
+  margin-top: 0.35rem;
+  font-size: 0.85rem;
+  color: #cbd5f5;
+}
+
+/* 정보 pill */
+.final-hero-info-row {
+  margin-top: 1.2rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.info-pill {
+  padding: 0.55rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid rgba(191, 219, 254, 0.7);
+  background: rgba(15, 23, 42, 0.9);
+  display: inline-flex;
+  flex-direction: column;
+  min-width: 140px;
+}
+
+.info-pill.long {
+  flex: 1;
+}
+
+.info-label {
+  font-size: 0.72rem;
+  color: #9ca3af;
+}
+
+.info-value {
+  font-size: 0.86rem;
+  color: #e5e7eb;
+  margin-top: 0.1rem;
+}
+
+/* 추천 이유 카드 */
+.final-why-card {
+  background: rgba(15, 23, 42, 0.97);
+  border-radius: 20px;
+  padding: 1.5rem 1.6rem 1.4rem;
+  box-shadow:
+    0 22px 50px rgba(15, 23, 42, 0.9),
+    0 0 0 1px rgba(148, 163, 184, 0.25);
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  color: #e5e7eb;
+}
+
+.final-why-title {
+  font-size: 0.96rem;
+  margin-bottom: 0.7rem;
+  color: #f9fafb;
+}
+
+.final-why-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.final-why-list li {
+  position: relative;
+  padding-left: 1.1rem;
+  font-size: 0.84rem;
+  color: #e5e7eb;
+  line-height: 1.5;
+}
+
+.final-why-list li + li {
+  margin-top: 0.4rem;
+}
+
+.final-why-list li::before {
+  content: "•";
+  position: absolute;
+  left: 0.25rem;
+  top: 0;
+  color: #60a5fa;
+}
+
+.final-why-hint {
+  margin-top: 0.8rem;
+  font-size: 0.78rem;
+  color: #9ca3af;
+}
+
+/* 버튼 섹션 */
+.final-actions {
+  margin-top: 0.4rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  justify-content: flex-end;
+}
+
+.final-primary-btn,
+.final-secondary-btn {
+  border-radius: 999px;
+  padding: 0.65rem 1.5rem;
+  font-size: 0.86rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition:
+    background 0.16s ease,
+    transform 0.12s ease,
+    box-shadow 0.16s ease,
+    border-color 0.16s ease;
+  white-space: nowrap;
+}
+
+/* 메인 CTA */
+.final-primary-btn {
+  background: linear-gradient(to right, #2563eb, #4f46e5);
+  color: #f9fafb;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(191, 219, 254, 0.9);
+}
+
+.final-primary-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 22px 44px rgba(15, 23, 42, 1);
+}
+
+/* 서브 CTA */
+.final-secondary-btn {
+  background: rgba(15, 23, 42, 0.9);
+  color: #e5e7eb;
+  border: 1px solid rgba(148, 163, 184, 0.7);
+}
+
+.final-secondary-btn:hover {
+  background: rgba(30, 64, 175, 0.9);
+  border-color: rgba(219, 234, 254, 1);
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.9);
+}
+
+/* 모바일 */
+.only-mobile {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .final-page {
+    padding: 4.25rem 1.2rem 2.5rem;
+  }
+
+  .final-title {
+    font-size: 1.3rem;
+  }
+
+  .final-subtitle {
+    font-size: 0.85rem;
+  }
+
+  .final-hero-card,
+  .final-why-card {
+    padding: 1.6rem 1.4rem 1.4rem;
+    border-radius: 18px;
+  }
+
+  .final-hero-info-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .final-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .final-primary-btn,
+  .final-secondary-btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .only-mobile {
+    display: inline;
+  }
+}
