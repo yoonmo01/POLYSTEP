@@ -109,6 +109,7 @@ class PolicyVerificationResponse(BaseModel):
     last_verified_at: Optional[datetime] = None
     evidence_text: Optional[str] = None
     extracted_criteria: Optional[Dict[str, Any]] = None
+    navigation_path: Optional[List[Dict[str, Any]]] = None
     error_message: Optional[str] = None
 
     # 🔥 ORM(PolicyVerification)에서 바로 변환 가능하게
@@ -132,3 +133,22 @@ class PolicyVerificationStatusResponse(BaseModel):
 class PolicyDetailResponse(BaseModel):
     policy: PolicyRead
     verification: Optional[PolicyVerificationResponse] = None
+
+# ===== User Guide (B안: Deep Track facts + 사용자정보 → 최종 안내서) =====
+class UserGuideRequest(BaseModel):
+    age: Optional[int] = None
+    region: Optional[str] = None
+    # 필요하면 status(학생/취업/구직 등) 추가해도 됨
+
+
+class UserGuideResponse(BaseModel):
+    badge_status: BadgeStatus
+    can_apply: bool
+    summary: str
+    required_documents: List[str] = []
+    apply_steps: List[Dict[str, Any]] = []
+    apply_channel: Optional[str] = None
+    apply_period: Optional[str] = None
+    contact: Dict[str, Any] = {}
+    missing_info: List[str] = []
+    evidence_text: Optional[str] = None

@@ -23,10 +23,13 @@ from app.schemas import (
     PolicyVerificationStatusEnum,
     PolicyDetailResponse,          # 🔥 추가
     SimilarPoliciesResponse,
+    UserGuideRequest,
+    UserGuideResponse,
 )
 from app.models import Policy, PolicyVerification, PolicyVerificationStatus
 from app.services.policy_service import PolicyService
 from app.services.policy_verification_service import PolicyVerificationService
+from app.services.llm_service import LLMService
 
 router = APIRouter()
 
@@ -188,6 +191,7 @@ def get_verification_result(
         last_verified_at=v.last_verified_at,
         evidence_text=v.evidence_text,
         extracted_criteria=v.extracted_criteria,
+        navigation_path=v.navigation_path,
         error_message=v.error_message,
     )
 
@@ -238,7 +242,14 @@ async def ws_verify(websocket: WebSocket, policy_id: int):
                 result = await runner()
 
                 v.status = PolicyVerificationStatus.SUCCESS.value
-                v.extracted_criteria = result.get("criteria")
+                v.extracted_criteria = {
+                    "criteria": result.get("criteria") or {},
+                    "required_documents": result.get("required_documents") or [],
+                    "apply_steps": result.get("apply_steps") or [],
+                    "apply_channel": result.get("apply_channel"),
+                    "apply_period": result.get("apply_period"),
+                    "contact": result.get("contact") or {},
+                }
                 v.evidence_text = result.get("evidence_text")
                 v.navigation_path = result.get("navigation_path")
                 v.last_verified_at = datetime.utcnow()
@@ -254,6 +265,7 @@ async def ws_verify(websocket: WebSocket, policy_id: int):
                         "verification_id": v.id,
                         "extracted_criteria": v.extracted_criteria,
                         "evidence_text": v.evidence_text,
+                        "navigation_path": v.navigation_path,
                     }
                 )
             except Exception as e:

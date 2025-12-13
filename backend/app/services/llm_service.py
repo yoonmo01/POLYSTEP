@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional
 import logging
 
 import google.generativeai as genai
+import json
 
 from app.config import settings
 from app.schemas import BadgeStatus, PolicySearchRequest
@@ -309,4 +310,121 @@ class LLMService:
                 },
                 "evidence_text": "LLM 응답 파싱 실패",
             }
+        return parsed
+
+    # ===== Deep Track(B안): facts + 사용자정보 + DB 정책정보 → 최종 안내서(JSON) =====
+    @staticmethod
+    def make_user_guide(
+        age: Optional[int],
+        region: Optional[str],
+        policy: Policy,
+        deep_facts: Dict[str, Any],
+        evidence_text: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Deep Track 결과(facts) + 사용자 정보 + 정책(DB)을 합쳐
+        '신청 가능 여부 / 필요 서류 / 신청 절차'를 구조화된 JSON으로 생성한다.
+        (B안: 백엔드에서 완성형 안내서 생성)
+        """
+        # 1) LLM 비활성화면: facts 기반으로 최소 안내서 생성 (판단은 WARNING)
+        if not settings.google_api_key:
+            return {
+                "badge_status": BadgeStatus.WARNING.value,
+                "can_apply": False,
+                "summary": f"'{policy.title}' 안내를 생성했습니다. (LLM 비활성화로 자동 판단은 보류)",
+                "required_documents": (deep_facts or {}).get("required_documents") or [],
+                "apply_steps": (deep_facts or {}).get("apply_steps") or [],
+                "apply_channel": (deep_facts or {}).get("apply_channel"),
+                "apply_period": (deep_facts or {}).get("apply_period"),
+                "contact": (deep_facts or {}).get("contact") or {},
+                "missing_info": ["LLM 비활성화 상태로 신청 가능 여부 자동 판단 불가"],
+                "evidence_text": evidence_text,
+            }
+
+        user_age = f"{age}세" if age is not None else "나이 정보 없음"
+        user_region = region or "지역 정보 없음"
+
+        facts_json = json.dumps(deep_facts or {}, ensure_ascii=False)
+
+        prompt = f"""
+너는 대한민국 청년정책 신청 안내를 만드는 전문가야.
+
+아래 사용자 정보 + 정책 DB 정보 + Deep Track으로 추출한 최신 원문 facts를 종합해서,
+사용자에게 보여줄 "최종 안내서"를 JSON으로 만들어라.
+
+요구사항:
+- eligibility 판단은 deep_facts.criteria를 근거로 하되, 정보가 부족하면 WARNING 처리하고 missing_info에 무엇이 부족한지 적어라.
+- required_documents/apply_steps/contact 등은 deep_facts를 최대한 그대로 활용하되, 표현은 사용자 친화적으로 다듬어라.
+- 반드시 JSON만 출력. 추가 문장 금지.
+
+출력 JSON 스키마:
+{{
+  "badge_status": "PASS" | "WARNING" | "FAIL",
+  "can_apply": true|false,
+  "summary": "사용자에게 보여줄 한 단락 요약",
+  "required_documents": ["...", "..."],
+  "apply_steps": [{{"step": 1, "title": "...", "detail": "...", "url": "..."}}],
+  "apply_channel": "온라인/방문/우편/혼합" | null,
+  "apply_period": "..." | null,
+  "contact": {{"org":"...", "tel":"...", "site":"..."}},
+  "missing_info": ["판단에 필요한 추가 정보...", "..."],
+  "evidence_text": "핵심 근거 발췌"
+}}
+
+사용자 정보:
+- 나이: {user_age}
+- 지역: {user_region}
+
+정책(DB) 메타:
+- title: {policy.title}
+- category: {policy.category}
+- region(meta): {policy.region}
+- age_min~age_max(meta): {policy.age_min}~{policy.age_max}
+- apply_period_raw(meta): {policy.apply_period_raw}
+- apply_url(meta): {policy.apply_url}
+- target_url(meta): {policy.target_url}
+
+Deep facts(JSON):
+{facts_json}
+
+원문 근거(evidence_text):
+{evidence_text or ""}
+        """.strip()
+
+        try:
+            model = genai.GenerativeModel("gemini-2.5-flash-lite")
+            response = model.generate_content(prompt)
+            raw = (response.text or "").strip()
+            parsed = LLMService._parse_fast_track_result(raw)
+        except Exception as e:
+            logger.error("[LLMService] make_user_guide 실패 (%s: %s)", e.__class__.__name__, str(e))
+            return {
+                "badge_status": BadgeStatus.WARNING.value,
+                "can_apply": False,
+                "summary": "안내서 생성 중 오류가 발생했습니다.",
+                "required_documents": (deep_facts or {}).get("required_documents") or [],
+                "apply_steps": (deep_facts or {}).get("apply_steps") or [],
+                "apply_channel": (deep_facts or {}).get("apply_channel"),
+                "apply_period": (deep_facts or {}).get("apply_period"),
+                "contact": (deep_facts or {}).get("contact") or {},
+                "missing_info": [f"LLM 호출 실패: {e.__class__.__name__}"],
+                "evidence_text": evidence_text,
+            }
+
+        # 2) 최소 필드 보정 + Enum 문자열 정규화
+        badge = (parsed.get("badge_status") or "WARNING").upper()
+        if badge not in ("PASS", "WARNING", "FAIL"):
+            badge = "WARNING"
+
+        parsed["badge_status"] = badge
+        parsed.setdefault("can_apply", False)
+        parsed.setdefault("summary", "")
+        parsed.setdefault("required_documents", [])
+        parsed.setdefault("apply_steps", [])
+        parsed.setdefault("apply_channel", None)
+        parsed.setdefault("apply_period", None)
+        parsed.setdefault("contact", {})
+        parsed.setdefault("missing_info", [])
+        parsed.setdefault("evidence_text", evidence_text)
+
         return parsed
