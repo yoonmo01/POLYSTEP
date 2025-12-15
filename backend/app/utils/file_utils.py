@@ -1,13 +1,9 @@
-# backend/app/utils/file_utils.py
-import os
-
-from ..config import settings
+#app/utils/file_utils.py
+from pathlib import Path
 
 
-def get_download_dir() -> str:
-    """
-    browser-use가 파일을 다운로드할 기본 폴더.
-    """
-    path = settings.download_dir
-    os.makedirs(path, exist_ok=True)
-    return path
+def ensure_download_dir() -> str:
+    base = Path(__file__).resolve().parents[2]  # backend/ 기준
+    download_dir = base / "data" / "downloads"
+    download_dir.mkdir(parents=True, exist_ok=True)
+    return str(download_dir)

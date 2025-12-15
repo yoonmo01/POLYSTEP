@@ -1,23 +1,26 @@
-# backend/app/db.py
+# app/db.py
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
+from app.config import settings
 
-from .config import settings
-
-SQLALCHEMY_DATABASE_URL = settings.database_url
-print("🔍 DB URL:", SQLALCHEMY_DATABASE_URL)  # 디버깅용
-
-# ✅ PostgreSQL용 엔진 (sqlite 체크 제거)
+# 🔥 pydantic AnyUrl -> str로 변환해서 넘기기
 engine = create_engine(
-    SQLALCHEMY_DATABASE_URL,
-    pool_pre_ping=True,  # 연결 살아있는지 체크 (옵션이지만 있으면 좋음)
+    str(settings.database_url),
+    future=True,
+    pool_pre_ping=True,
 )
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = sessionmaker(
+    bind=engine,
+    autocommit=False,
+    autoflush=False,
+    future=True,
+)
 
 Base = declarative_base()
 
 
+# ✅ FastAPI Depends()에서 쓰는 DB 세션 의존성 추가
 def get_db():
     db = SessionLocal()
     try:

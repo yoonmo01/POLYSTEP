@@ -1,35 +1,46 @@
-# backend/app/deps.py
+from typing import Generator
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
-from .db import get_db
-from .models import User
-from .security import decode_token
+from app.db import SessionLocal
+from app.models import User
+from app.security import verify_token
 
-# 🔁 OAuth2PasswordBearer → HTTPBearer 로 변경
-auth_scheme = HTTPBearer(auto_error=True)
+# 🔥 HTTP Bearer 토큰 방식 (Swagger에서 "토큰만" 넣는 UI)
+bearer_scheme = HTTPBearer(auto_error=True)
+
+
+def get_db() -> Generator[Session, None, None]:
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(auth_scheme),
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> User:
-    # Authorization: Bearer <token>
-    token = credentials.credentials
+    """
+    Authorization: Bearer <토큰>
+    형태의 헤더에서 토큰만 떼어 와서 검증하는 의존성.
+    Swagger /docs에서도 Authorize 눌러서 토큰만 넣으면 됨.
+    """
+    token = credentials.credentials  # "Bearer " 빼고 실제 토큰만
 
-    token_data = decode_token(token)
-    if token_data is None or token_data.email is None:
+    try:
+        token_data = verify_token(token)
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
+            detail="Invalid authentication credentials",
         )
 
-    user = db.query(User).filter(User.email == token_data.email).first()
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-        )
+    user = db.get(User, token_data.user_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
 
     return user
