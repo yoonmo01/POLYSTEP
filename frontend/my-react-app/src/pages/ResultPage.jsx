@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./ResultPage.css";
 
+// ✅ 여기 mockResults는 너 기존 ResultPage가 갖고 있던 데이터로 교체해도 됨
 const mockResults = [
   {
     id: 1,
@@ -11,7 +12,7 @@ const mockResults = [
     amount: "월 최대 20만 원",
     period: "최대 2년 지원",
     target: "만 19~34세 무주택 청년",
-    url: "https://example.com/policy/1",
+    url: "https://example.com",
     tags: ["월세 지원", "단독 신청 가능"],
     score: "높음",
   },
@@ -23,7 +24,7 @@ const mockResults = [
     amount: "참여수당 및 취업 성공 수당",
     period: "최대 1년",
     target: "구직 중인 미취업 청년",
-    url: "https://example.com/policy/2",
+    url: "https://example.com",
     tags: ["직무 교육", "컨설팅"],
     score: "매우 높음",
   },
@@ -35,56 +36,81 @@ const mockResults = [
     amount: "등록금 일부 또는 전액",
     period: "1개 학기 기준",
     target: "소득 기준 충족 대학(원)생",
-    url: "https://example.com/policy/3",
+    url: "https://example.com",
     tags: ["등록금", "소득연계"],
     score: "중간",
   },
 ];
 
 function ResultPage() {
-  const [selected, setSelected] = useState(mockResults[0]);
   const navigate = useNavigate();
+
+  const [selected, setSelected] = useState(mockResults[0]);
+  const [verifyLogs, setVerifyLogs] = useState([]);
+  const [isVerifying, setIsVerifying] = useState(false);
+
+  const iframeSrc = useMemo(() => selected?.url || "", [selected]);
+
+  const pushLog = (msg) => {
+    const ts = new Date().toLocaleTimeString("ko-KR", { hour12: false });
+    setVerifyLogs((prev) => [...prev, `[${ts}] ${msg}`]);
+  };
+
+  const handleVerify = () => {
+    if (!selected) return;
+    if (isVerifying) return;
+
+    setIsVerifying(true);
+    setVerifyLogs([]);
+
+    pushLog(`검증 시작: "${selected.title}"`);
+    pushLog("입력 조건 로드...");
+    setTimeout(() => pushLog("자격 조건 매칭 계산 중..."), 400);
+    setTimeout(() => pushLog("우선순위 점수 재평가 중..."), 900);
+    setTimeout(() => pushLog("공식 신청 페이지 URL 확인 중..."), 1300);
+    setTimeout(() => {
+      pushLog("검증 완료 ✅ (현재는 UI 데모 로그)");
+      setIsVerifying(false);
+    }, 1700);
+  };
 
   return (
     <div className="result-page">
       <div className="result-shell">
         <header className="result-header">
-          <span className="result-step">STEP 3 · 추천 결과</span>
+          <span className="result-step">STEP 2 · 추천 결과</span>
           <h1 className="result-title">지금 조건에 맞는 정책들을 찾았어요</h1>
           <p className="result-subtitle">
-            연소득, 관심 분야, 취업 상태를 바탕으로
-            <br className="only-mobile" />
-            우선순위가 높은 정책부터 정리했어요.
+            선택한 조건을 바탕으로 우선순위가 높은 정책부터 정리했어요.
           </p>
-          {/* === 추가된 버튼 영역 === */}
+
           <div className="result-top-actions">
             <button
               type="button"
               className="result-back-btn"
               onClick={() => navigate("/question")}
             >
-              ← 이전 단계로 돌아가기
+              ← 이전 단계로
             </button>
-
             <button
               type="button"
               className="result-next-btn"
               onClick={() => navigate("/final")}
             >
-              최종 추천 보러가기 →
+              최종 추천 →
             </button>
           </div>
         </header>
 
         <div className="result-layout">
-          {/* 왼쪽: 결과 리스트 */}
+          {/* ✅ 왼쪽 리스트 패널 (기존 디자인 그대로 사용) */}
           <section className="result-list-panel">
             <div className="list-head">
               <p className="list-count">
                 총 <strong>{mockResults.length}</strong>개의 추천 정책
               </p>
               <p className="list-hint">
-                카드를 클릭하면 오른쪽에서 상세 내용을 볼 수 있어요.
+                카드를 클릭하면 오른쪽에서 해당 정책 페이지를 바로 볼 수 있어요.
               </p>
             </div>
 
@@ -95,9 +121,7 @@ function ResultPage() {
                   type="button"
                   className={
                     "result-card" +
-                    (selected && selected.id === item.id
-                      ? " result-card-active"
-                      : "")
+                    (selected?.id === item.id ? " result-card-active" : "")
                   }
                   onClick={() => setSelected(item)}
                 >
@@ -131,96 +155,114 @@ function ResultPage() {
             </div>
           </section>
 
-          {/* 오른쪽: 상세 + iframe 자리 */}
+          {/* ✅ 오른쪽 상세 패널: “텍스트 제거” + “전체를 iframe” */}
           <section className="result-detail-panel">
-            <div className="detail-card">
-              {selected ? (
-                <>
-                  <div className="detail-head">
-                    <span className="detail-category">
-                      {selected.category}
-                    </span>
-                    <h2 className="detail-title">{selected.title}</h2>
-                    <p className="detail-agency">{selected.agency}</p>
+            <div className="detail-card" style={{ height: "100%" }}>
+              <div
+                className="detail-iframe-block"
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  minHeight: 520,
+                }}
+              >
+                {selected?.url ? (
+                  <iframe
+                    src={iframeSrc}
+                    title={selected.title}
+                    className="result-iframe"
+                    loading="lazy"
+                    style={{
+                      height: "100%", // ✅ 기존 CSS의 260px을 덮어씀
+                      borderRadius: 14,
+                    }}
+                  />
+                ) : (
+                  <div className="detail-empty">
+                    정책 URL이 아직 없어요. (추후 DB 연결 예정)
                   </div>
-
-                  <div className="detail-info-grid">
-                    <div className="detail-info-item">
-                      <span className="label">지원 금액</span>
-                      <span className="value">{selected.amount}</span>
-                    </div>
-                    <div className="detail-info-item">
-                      <span className="label">지원 기간</span>
-                      <span className="value">{selected.period}</span>
-                    </div>
-                    <div className="detail-info-item">
-                      <span className="label">대상</span>
-                      <span className="value">{selected.target}</span>
-                    </div>
-                    <div className="detail-info-item">
-                      <span className="label">우선순위</span>
-                      <span className="value">{selected.score}</span>
-                    </div>
-                  </div>
-
-                  <div className="detail-tags-row">
-                    {selected.tags.map((tag) => (
-                      <span key={tag} className="detail-tag">
-                        #{tag}
-                      </span>
-                    ))}
-                  </div>
-
-                  <div className="detail-iframe-block">
-                    <div className="iframe-head">
-                      <p className="iframe-title">정책 공식 홈페이지</p>
-                      <p className="iframe-subtitle">
-                        나중에 DB와 연동되면 이 영역에서 정책 신청 페이지를
-                        바로 볼 수 있어요.
-                      </p>
-                    </div>
-
-                    <div className="iframe-placeholder">
-                      {/* 실제 연결 시 아래처럼 사용할 수 있음
-                      <iframe
-                        src={selected.url}
-                        title={selected.title}
-                        className="result-iframe"
-                      />
-                      */}
-                      <p className="iframe-placeholder-text">
-                        현재는 예시 데이터입니다.
-                        <br />
-                        추후 정책 API/DB를 연결한 뒤,
-                        <br />
-                        이 영역에 실제 정책 홈페이지가 열리도록 구현할 수 있어요.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="detail-footer">
-                    <button
-                      type="button"
-                      className="detail-link-btn"
-                      onClick={() => {
-                        // 임시: 새 탭으로 예시 URL 열기
-                        if (selected.url) {
-                          window.open(selected.url, "_blank", "noopener");
-                        }
-                      }}
-                    >
-                      정책 홈페이지 새 탭에서 열기
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <div className="detail-empty">
-                  <p>왼쪽에서 보고 싶은 정책 카드를 선택해 주세요.</p>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </section>
         </div>
+
+        {/* ✅ 아래 섹션 1개 추가: “검증 로그 스페이스” */}
+        <section
+          className="result-list-panel"
+          style={{ marginTop: "1.4rem", padding: "1.4rem" }}
+        >
+          <div
+            className="list-head"
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-end",
+              gap: "1rem",
+            }}
+          >
+            <div>
+              <p className="list-count" style={{ marginBottom: 4 }}>
+                검증 로그
+              </p>
+              <p className="list-hint" style={{ marginTop: 0 }}>
+                “검증하기”를 누르면 검증 과정을 로그로 출력합니다.
+              </p>
+            </div>
+
+            <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="result-next-btn"
+                onClick={handleVerify}
+                disabled={isVerifying}
+              >
+                {isVerifying ? "검증 중..." : "검증하기"}
+              </button>
+              <button
+                type="button"
+                className="result-back-btn"
+                onClick={() => setVerifyLogs([])}
+                disabled={verifyLogs.length === 0 || isVerifying}
+              >
+                로그 지우기
+              </button>
+            </div>
+          </div>
+
+          <div
+            style={{
+              marginTop: "0.9rem",
+              borderRadius: 14,
+              border: "1px solid rgba(148, 163, 184, 0.35)",
+              background: "rgba(15, 23, 42, 0.9)",
+              padding: "0.9rem 1rem",
+              minHeight: 160,
+              maxHeight: 260,
+              overflow: "auto",
+            }}
+          >
+            {verifyLogs.length === 0 ? (
+              <p style={{ margin: 0, color: "#9ca3af", fontSize: "0.85rem" }}>
+                아직 로그가 없어요. “검증하기”를 눌러보세요.
+              </p>
+            ) : (
+              <ul
+                style={{
+                  margin: 0,
+                  paddingLeft: "1.1rem",
+                  color: "#e5e7eb",
+                  fontSize: "0.85rem",
+                  lineHeight: 1.55,
+                }}
+              >
+                {verifyLogs.map((line, idx) => (
+                  <li key={`${line}-${idx}`}>{line}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
       </div>
     </div>
   );
