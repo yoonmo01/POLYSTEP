@@ -2,7 +2,8 @@ import { Routes, Route, Link, useLocation } from "react-router-dom";
 
 import "./App.css";
 import HomePage from "./pages/Homepage";
-import ProfilePage from "./pages/ProFilePage";
+import LoginPage from "./pages/LoginPage";
+import SignupPage from "./pages/SignupPage";
 import QuestionPage from "./pages/QuestionPage";
 import ResultPage from "./pages/ResultPage";
 import FinalPage from "./pages/FinalPage";
@@ -23,9 +24,13 @@ function App() {
             </Link>
 
             <div className="app-nav-right">
-              <Link to="/profile" className="app-nav-btn">
-                프로필 설정
+              <Link to="/login" className="app-nav-btn">
+                로그인
               </Link>
+              <Link to="/signup" className="app-nav-btn">
+                회원가입
+              </Link>
+              
               <Link to="/mypage" className="app-nav-btn app-nav-btn-outline">
                 마이페이지
               </Link>
@@ -36,7 +41,8 @@ function App() {
 
       <Routes>
         <Route path="/" element={<HomePage />} />
-        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
         <Route path="/question" element={<QuestionPage />} />
         <Route path="/result" element={<ResultPage />} />
         <Route path="/final" element={<FinalPage />} />

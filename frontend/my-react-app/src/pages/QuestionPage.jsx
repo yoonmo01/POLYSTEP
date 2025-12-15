@@ -60,7 +60,7 @@ function QuestionPage() {
     <div className="question-page">
       <div className="question-shell">
         <header className="question-header">
-          <span className="question-step">STEP 2 · 조건 선택</span>
+          <span className="question-step">STEP 1 · 조건 선택</span>
           <h1 className="question-title">지금 상황에 맞는 조건을 알려주세요</h1>
           <p className="question-subtitle">
             폴리스탭이 수많은 정책 중에서

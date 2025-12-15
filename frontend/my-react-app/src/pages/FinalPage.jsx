@@ -23,7 +23,7 @@ function FinalPage() {
     <div className="final-page">
       <div className="final-shell">
         <header className="final-header">
-          <span className="final-step">STEP 4 · 최종 추천</span>
+          <span className="final-step">STEP 3 · 최종 추천</span>
           <h1 className="final-title">지금, 나에게 가장 잘 맞는 정책이에요</h1>
           <p className="final-subtitle">
             입력한 프로필과 조건을 바탕으로

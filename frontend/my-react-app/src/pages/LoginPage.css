@@ -1,5 +1,5 @@
-/* 페이지 전체 배경 + 정렬 */
-.profile-page {
+/* 공통: 페이지 전체 배경 + 정렬 */
+.auth-page {
   min-height: 100vh;
   padding: 4rem 1.5rem;
   background: radial-gradient(circle at top left, #1e3a8a 0, #5f6aa2 55%, #bcbcbc 100%);
@@ -8,13 +8,13 @@
   align-items: center;
 }
 
-.profile-shell {
+.auth-shell {
   width: 100%;
   max-width: 880px;
 }
 
-/* 가운데 카드 */
-.profile-card {
+/* 공통: 가운데 카드 */
+.auth-card {
   background: rgba(15, 23, 42, 0.92);
   border-radius: 24px;
   padding: 2.4rem 2.6rem;
@@ -25,12 +25,12 @@
   color: #e5e7eb;
 }
 
-/* 헤더 영역 */
-.profile-header {
+/* 헤더 */
+.auth-header {
   margin-bottom: 1.8rem;
 }
 
-.profile-step {
+.auth-step {
   display: inline-flex;
   align-items: center;
   padding: 0.16rem 0.7rem;
@@ -42,43 +42,42 @@
   text-transform: uppercase;
 }
 
-.profile-title {
+.auth-title {
   margin-top: 0.9rem;
   font-size: 1.5rem;
   line-height: 1.35;
   color: #f9fafb;
 }
 
-.profile-subtitle {
+.auth-subtitle {
   margin-top: 0.4rem;
   font-size: 0.9rem;
   color: #9ca3af;
 }
 
-/* 폼 레이아웃 */
-.profile-form {
+/* 폼 */
+.auth-form {
   margin-top: 0.8rem;
 }
 
-.profile-grid {
+.auth-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1.2rem 1.5rem;
 }
 
-/* 필드 */
-.profile-field {
+.auth-field {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
 }
 
-.profile-field label {
+.auth-field label {
   font-size: 0.8rem;
   color: #cbd5f5;
 }
 
-.profile-field input {
+.auth-field input {
   border-radius: 10px;
   border: 1px solid rgba(148, 163, 184, 0.55);
   background: rgba(15, 23, 42, 0.9);
@@ -93,19 +92,24 @@
     transform 0.12s ease;
 }
 
-.profile-field input::placeholder {
+.auth-field input::placeholder {
   color: #6b7280;
 }
 
-.profile-field input:focus {
+.auth-field input:focus {
   border-color: #60a5fa;
   box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.7);
   background: rgba(15, 23, 42, 0.98);
   transform: translateY(-1px);
 }
 
-/* 푸터 영역 */
-.profile-footer {
+/* 로그인 페이지처럼 한 줄로 쓰고 싶을 때 */
+.auth-span-2 {
+  grid-column: span 2;
+}
+
+/* 푸터 */
+.auth-footer {
   margin-top: 2rem;
   display: flex;
   align-items: flex-end;
@@ -113,14 +117,24 @@
   gap: 1.2rem;
 }
 
-.profile-hint {
+.auth-hint {
   font-size: 0.78rem;
   color: #9ca3af;
   line-height: 1.4;
 }
 
+.auth-link {
+  color: #bfdbfe;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(191, 219, 254, 0.35);
+}
+
+.auth-link:hover {
+  border-bottom-color: rgba(191, 219, 254, 0.9);
+}
+
 /* 제출 버튼 */
-.profile-submit-btn {
+.auth-submit-btn {
   padding: 0.7rem 1.6rem;
   border-radius: 999px;
   border: none;
@@ -138,13 +152,13 @@
     filter 0.15s ease;
 }
 
-.profile-submit-btn:hover {
+.auth-submit-btn:hover {
   transform: translateY(-1px);
   box-shadow: 0 20px 40px rgba(15, 23, 42, 0.95);
   filter: brightness(1.05);
 }
 
-.profile-submit-btn:active {
+.auth-submit-btn:active {
   transform: translateY(0);
   box-shadow: 0 10px 22px rgba(15, 23, 42, 0.8);
 }
@@ -155,33 +169,37 @@
 }
 
 @media (max-width: 768px) {
-  .profile-page {
+  .auth-page {
     padding: 4.25rem 1.2rem 3rem;
   }
 
-  .profile-card {
+  .auth-card {
     padding: 1.8rem 1.5rem;
     border-radius: 18px;
   }
 
-  .profile-title {
+  .auth-title {
     font-size: 1.25rem;
   }
 
-  .profile-subtitle {
+  .auth-subtitle {
     font-size: 0.85rem;
   }
 
-  .profile-grid {
+  .auth-grid {
     grid-template-columns: 1fr;
   }
 
-  .profile-footer {
+  .auth-span-2 {
+    grid-column: auto;
+  }
+
+  .auth-footer {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .profile-submit-btn {
+  .auth-submit-btn {
     width: 100%;
     text-align: center;
   }
