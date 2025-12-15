@@ -105,6 +105,8 @@ class PolicyVerificationStatusEnum(str, Enum):
 
 
 class PolicyVerificationResponse(BaseModel):
+    policy_id: int
+    verification_id: int
     status: PolicyVerificationStatusEnum
     last_verified_at: Optional[datetime] = None
     evidence_text: Optional[str] = None

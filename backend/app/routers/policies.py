@@ -187,6 +187,8 @@ def get_verification_result(
         raise HTTPException(status_code=404, detail="Verification not found")
 
     return PolicyVerificationResponse(
+        policy_id=policy_id,
+        verification_id=v.id,
         status=PolicyVerificationStatusEnum(v.status),
         last_verified_at=v.last_verified_at,
         evidence_text=v.evidence_text,

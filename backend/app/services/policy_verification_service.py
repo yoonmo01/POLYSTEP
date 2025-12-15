@@ -2,7 +2,9 @@
 
 from datetime import datetime
 from typing import Any, Callable, Optional, Dict, List
+import os
 
+import traceback
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
@@ -43,6 +45,33 @@ class PolicyVerificationService:
         return v
 
     @staticmethod
+    def _decide_status_from_browser_result(result: Dict[str, Any]) -> tuple[str, str]:
+        """
+        browser_service 결과를 보고 SUCCESS/FAILED를 결정.
+        - matched != True 이거나 needs_review=True 이거나 error_message가 있으면 FAILED로 둔다.
+        (지금은 enum에 NEEDS_REVIEW가 없다고 가정 → FAILED로 통일)
+        """
+        matched = result.get("matched")
+        needs_review = bool(result.get("needs_review"))
+        err = (result.get("error_message") or "").strip()
+
+        # ✅ 명시적 성공 조건: matched == True AND needs_review == False AND error 없음
+        if matched is True and (not needs_review) and (not err):
+            return (PolicyVerificationStatus.SUCCESS.value, "")
+
+        # ✅ 실패/검토 필요 사유를 사람이 보기 좋게 정리
+        reasons: List[str] = []
+        if matched is not True:
+            reasons.append(f"matched={matched!r}")
+        if needs_review:
+            reasons.append("needs_review=True")
+        if err:
+            reasons.append(f"error_message={err}")
+
+        reason_text = " | ".join(reasons) if reasons else "verification not successful"
+        return (PolicyVerificationStatus.FAILED.value, reason_text)
+
+    @staticmethod
     def run_verification_job_sync(
         verification_id: int,
         log_callback: Optional[Callable[[str], Any]] = None,
@@ -68,6 +97,9 @@ class PolicyVerificationService:
                 db.commit()
                 return
 
+            # ✅ 시작 시점에 상태를 RUNNING처럼 보이게(없으면 PENDING 유지해도 OK)
+            # enum에 RUNNING이 없을 수 있으니 건드리지 않음
+            # v.status = PolicyVerificationStatus.PENDING.value
             if log_callback:
                 log_callback(f"[BG] 검증 시작 (policy_id={policy.id}, verification_id={v.id})")
             print(f"[BG] 검증 시작 (policy_id={policy.id}, verification_id={v.id})")
@@ -79,6 +111,11 @@ class PolicyVerificationService:
                 log_callback,
             )
 
+            # ✅ 여기서 먼저 상태 판정(타임아웃인데 SUCCESS로 저장되는 문제 방지)
+            decided_status, status_reason = PolicyVerificationService._decide_status_from_browser_result(result)
+            if log_callback:
+                log_callback(f"[BG] browser_result status: {decided_status} ({status_reason})")
+ 
             # 2) 다운로드/이미지URL 텍스트화 (MVP)
             downloads_dir = result.get("downloads_dir") or ""
             downloaded_files = result.get("downloaded_files") or []
@@ -95,14 +132,15 @@ class PolicyVerificationService:
                     verification_id=v.id,
                 )
 
-            if log_callback:
-                log_callback(f"[BG] 이미지 URL OCR 시작 (urls={len(image_urls)})")
-
+            # ✅ 변경: "사진은 무조건 URL 방식"
+            # - 기본은 OCR/다운로드를 하지 않는다. (카드뉴스/바로보기 이미지는 URL만 저장해서 프론트에서 바로 보여주기)
+            # - 필요할 때만 ENABLE_IMAGE_OCR=true 로 켤 수 있게 게이트를 둔다.
+            enable_image_ocr = os.getenv("ENABLE_IMAGE_OCR", "false").lower() in ("1", "true", "yes", "y", "on")
             image_url_texts: List[Dict[str, Any]] = []
-            if downloads_dir and isinstance(image_urls, list) and image_urls:
-                # ImageURLService는 async -> 여기서는 동기로 돌리기 위해 asyncio.run 사용
+            if enable_image_ocr and downloads_dir and isinstance(image_urls, list) and image_urls:
+                if log_callback:
+                    log_callback(f"[BG] 이미지 URL OCR 시작 (urls={len(image_urls)})")
                 import asyncio as _asyncio
-
                 image_url_texts = _asyncio.run(
                     ImageURLService.ocr_from_urls(
                         image_urls=image_urls,
@@ -110,6 +148,9 @@ class PolicyVerificationService:
                         verification_id=v.id,
                     )
                 )
+            else:
+                if log_callback:
+                    log_callback(f"[BG] 이미지 OCR 스킵(URL만 저장) (urls={len(image_urls)})")
 
             # 3) 번들 만들기
             if log_callback:
@@ -134,9 +175,13 @@ class PolicyVerificationService:
             )
 
             # 5) DB 저장(마이그레이션 최소화: extracted_criteria에 통째로 넣기)
-            v.status = PolicyVerificationStatus.SUCCESS.value
+            v.status = decided_status
 
             v.extracted_criteria = {
+                # ✅ UI에서 쓰는 식별자: id는 빼고 policy_id / verification_id만 유지
+                "policy_id": policy.id,
+                "verification_id": v.id,
+                
                 # ✅ 기존 Deep Track facts
                 "criteria": result.get("criteria") or {},
                 "required_documents": result.get("required_documents") or [],
@@ -152,27 +197,34 @@ class PolicyVerificationService:
                 "image_url_texts": image_url_texts,        # URL OCR 결과
                 "bundle_stats": bundle.get("stats") or {}, # 번들 통계
                 "final_guidance": final_guidance,          # 사용자에게 보여줄 최종 JSON
+                # ✅ 상태 판정 근거(디버깅용)
+                "verification_status_reason": status_reason,
             }
 
             v.evidence_text = result.get("evidence_text")
             # navigation_path는 “주입 제거”했을 수 있으니 그대로 저장
             v.navigation_path = result.get("navigation_path")
             v.last_verified_at = datetime.utcnow()
-            v.error_message = result.get("error_message")
+            # ✅ error_message 덮어쓰기 방지:
+            # - browser_service의 error_message가 있으면 우선 사용
+            # - 없으면 status_reason(FAILED 사유)을 사용
+            browser_err = (result.get("error_message") or "").strip()
+            final_err = browser_err or (status_reason or "").strip()
+            v.error_message = final_err if final_err else None
 
             db.add(v)
             db.commit()
 
             print(f"[BG] 검증+요약 완료 (verification_id={v.id})")
             if log_callback:
-                log_callback("[BG] 검증+요약 완료 (SUCCESS)")
+                log_callback(f"[BG] 검증+요약 완료 ({v.status})")
         except Exception as e:
             print(f"[BG] 검증 실패 (verification_id={verification_id}): {e}")
             try:
                 v = db.get(PolicyVerification, verification_id)
                 if v:
                     v.status = PolicyVerificationStatus.FAILED.value
-                    v.error_message = str(e)
+                    v.error_message = f"{e}\n{traceback.format_exc()}"
                     v.last_verified_at = datetime.utcnow()
                     db.add(v)
                     db.commit()

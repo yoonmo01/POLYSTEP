@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import time
 import os
 import re
 from datetime import datetime, timezone
@@ -46,6 +47,13 @@ logger.info(
 # WebSocket 쪽에서는 async 콜백을 쓸 수 있으니까 이렇게 타입 정의
 AsyncLogCallback = Optional[Callable[[str], Awaitable[None]]]
 
+_SCREENSHOT_TIMEOUT_RE = re.compile(r"ScreenshotWatchdog\.on_ScreenshotEvent.*timed out", re.IGNORECASE)
+_DOMWATCHDOG_SCREENSHOT_FAIL_RE = re.compile(r"Clean screenshot failed", re.IGNORECASE)
+
+def _is_browser_snapshot_timeout(e: Exception) -> bool:
+    msg = f"{type(e).__name__}: {e}"
+    return bool(_SCREENSHOT_TIMEOUT_RE.search(msg) or _DOMWATCHDOG_SCREENSHOT_FAIL_RE.search(msg))
+
 
 def _env_flag(name: str, default: str = "false") -> bool:
     return os.getenv(name, default).lower() in ("1", "true", "yes", "y", "on")
@@ -84,7 +92,10 @@ _OG_IMAGE_RE = re.compile(
     r"""<meta[^>]+property\s*=\s*["']og:image["'][^>]+content\s*=\s*["']([^"']+)["']""",
     re.IGNORECASE,
 )
+_A_HREF_RE = re.compile(r"""<a[^>]+href\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
 
+# 이미지 URL로 볼 확장자 (첨부/바로보기 링크가 jpg로 직접 걸린 케이스 대응)
+_IMG_EXT_RE = re.compile(r"""\.(?:png|jpe?g|gif|webp)(?:\?.*)?$""", re.IGNORECASE)
 
 def _dedup_keep_order(items: List[str]) -> List[str]:
     out: List[str] = []
@@ -133,10 +144,72 @@ def _extract_image_urls_from_html(html: str, base_url: str, limit: int = 30) -> 
         if src.lower().startswith("data:"):
             continue
         found.append(urljoin(base_url, src))
-
+    # ✅ a href 로 직접 걸린 이미지(첨부 jpg / 카드뉴스 파일 링크)도 수집
+    for m in _A_HREF_RE.finditer(html):
+        href = (m.group(1) or "").strip()
+        if not href:
+            continue
+        if href.lower().startswith("data:"):
+            continue
+        abs_url = urljoin(base_url, href)
+        if _IMG_EXT_RE.search(abs_url):
+            found.append(abs_url)
     found = _dedup_keep_order(found)
     return found[: max(0, limit)]
 
+async def _enrich_image_urls_via_related_pages(
+    entry_url: str,
+    base_image_urls: List[str],
+    max_image_urls: int = 30,
+    max_related_pages: int = 3,
+) -> List[str]:
+    """
+    ✅ "바로보기/원문보기/첨부"처럼 별도 뷰어 페이지를 여는 사이트 대응:
+    - entry_url HTML에서 이미지 URL을 수집하고,
+    - 추가로 '관련 링크' 몇 개를 골라(fetch) 그 안의 이미지 URL도 수집
+    - 최종적으로 URL만 반환 (이미지 파일 다운로드는 여기서 하지 않음)
+    """
+    if not entry_url:
+        return _dedup_keep_order(base_image_urls)[:max_image_urls]
+
+    urls: List[str] = list(base_image_urls or [])
+
+    html = await _fetch_html(entry_url, timeout_sec=10.0)
+    urls.extend(_extract_image_urls_from_html(html, entry_url, limit=max_image_urls))
+
+    # 관련 페이지 후보 링크 수집 (가볍게: a href 전체 중 "view/첨부/원문/바로보기" 느낌 URL)
+    candidates: List[str] = []
+    for m in _A_HREF_RE.finditer(html or ""):
+        href = (m.group(1) or "").strip()
+        if not href:
+            continue
+        if href.lower().startswith("javascript:"):
+            continue
+        abs_url = urljoin(entry_url, href)
+
+        # 이미지는 바로 후보로
+        if _IMG_EXT_RE.search(abs_url):
+            candidates.append(abs_url)
+            continue
+
+        # "바로보기/원문보기/첨부/다운로드" 류로 보이는 링크만 소량 추려서 재-fetch
+        low = abs_url.lower()
+        if any(k in low for k in ("amode=view", "view", "preview", "viewer", "attach", "download", "file", "atch", "origin")):
+            candidates.append(abs_url)
+
+    candidates = _dedup_keep_order(candidates)
+    # 너무 많이 돌면 비용/시간 증가 → 상위 N개만
+    candidates = candidates[: max_related_pages]
+
+    for u in candidates:
+        # 링크 자체가 이미지면 추가
+        if _IMG_EXT_RE.search(u):
+            urls.append(u)
+            continue
+        sub_html = await _fetch_html(u, timeout_sec=10.0)
+        urls.extend(_extract_image_urls_from_html(sub_html, u, limit=max_image_urls))
+
+    return _dedup_keep_order(urls)[:max_image_urls]
 
 # ============================================================
 # ✅ 후처리(Validation + Repair) 유틸
@@ -445,6 +518,15 @@ class BrowserService:
 
         collect_images = _env_flag("BROWSER_COLLECT_IMAGE_URLS", "true")
         max_image_urls = _env_int("BROWSER_MAX_IMAGE_URLS", 30)
+        # ✅ 바로보기/첨부 뷰어까지 따라가서 URL 수집할지 (기본 true)
+        follow_related = _env_flag("BROWSER_IMAGE_FOLLOW_RELATED_PAGES", "true")
+        max_related_pages = _env_int("BROWSER_IMAGE_MAX_RELATED_PAGES", 3)
+
+        # ✅ 스냅샷 타임아웃이 너무 자주 나면 조기 종료(루프/클릭 깨짐 방지)
+        #   - browser-use 쪽에서 Clean screenshot timeout이 누적되면 stale node 클릭이 연쇄로 발생함
+        #   - 이 값은 상황 따라 조절 가능
+        max_snapshot_failures = _env_int("BROWSER_MAX_SNAPSHOT_FAILURES", 2)
+        snapshot_failures = 0
 
         # ✅ runaway 방지 옵션
         max_actions = _env_int("BROWSER_AGENT_MAX_ACTIONS", 20)
@@ -553,6 +635,37 @@ class BrowserService:
                     last_err = None
                     break
                 except Exception as e:
+                    # ✅ screenshot/dom snapshot timeout 누적 감지 → 더 끌면 클릭이 계속 깨짐
+                    #    (browser-use 내부 watchdog 이슈로 상태 인식이 무너지기 시작했다는 신호)
+                    if _is_browser_snapshot_timeout(e):
+                        snapshot_failures += 1
+                        logger.warning(
+                            "[BrowserService] snapshot timeout detected (%s/%s): %s",
+                            snapshot_failures,
+                            max_snapshot_failures,
+                            e,
+                        )
+                        if snapshot_failures >= max_snapshot_failures:
+                            return {
+                                "matched": None,
+                                "matched_title": None,
+                                "source_url": entry_url,
+                                "criteria": {},
+                                "required_documents": [],
+                                "apply_steps": [],
+                                "apply_channel": None,
+                                "apply_period": None,
+                                "contact": {},
+                                "evidence_text": "",
+                                "navigation_path": [],
+                                "error_message": "Browser snapshot (screenshot/DOM) timeouts occurred repeatedly. Manual review needed.",
+                                "downloaded_files": [],
+                                "downloads_dir": downloads_dir,
+                                "image_urls": [],
+                                "confidence": 0.0,
+                                "needs_review": True,
+                            }
+                            
                     last_err = e
                     if _is_overload_error(e) and attempt < max_retries:
                         sleep_s = base_backoff * (2 ** attempt)
@@ -713,7 +826,8 @@ class BrowserService:
         # ✅ 여기서 후처리(교정) 한번 돌리고 반환
         result = _repair_result(result)
 
-        # ✅ image_urls 보강: LLM이 누락하면 source_url HTML을 직접 받아 img src 파싱
+        # ✅ image_urls 보강: "사진은 무조건 URL 방식"
+        # - LLM 출력이 있든 없든, 최종 source_url/entry_url 기준으로 HTML 파싱을 항상 수행해 보강한다.
         try:
             if collect_images:
                 cur = result.get("image_urls")
@@ -721,15 +835,22 @@ class BrowserService:
                     cur = []
                 cur = [str(x).strip() for x in cur if str(x).strip()]
 
-                if len(cur) == 0:
-                    html_url = _norm_none_or_str(result.get("source_url")) or entry_url or ""
-                    if html_url:
-                        if log_callback:
-                            await log_callback("이미지 URL 수집(HTML 파싱) 시도 중...")
-                        html = await _fetch_html(html_url, timeout_sec=10.0)
-                        result["image_urls"] = _extract_image_urls_from_html(
-                            html, html_url, limit=max_image_urls
+                html_url = _norm_none_or_str(result.get("source_url")) or entry_url or ""
+                if html_url:
+                    if log_callback:
+                        await log_callback("이미지 URL 수집(URL 방식: HTML 파싱) 시도 중...")
+
+                    if follow_related:
+                        result["image_urls"] = await _enrich_image_urls_via_related_pages(
+                            entry_url=html_url,
+                            base_image_urls=cur,
+                            max_image_urls=max_image_urls,
+                            max_related_pages=max_related_pages,
                         )
+                    else:
+                        html = await _fetch_html(html_url, timeout_sec=10.0)
+                        merged = cur + _extract_image_urls_from_html(html, html_url, limit=max_image_urls)
+                        result["image_urls"] = _dedup_keep_order(merged)[:max_image_urls]
                 else:
                     result["image_urls"] = _dedup_keep_order(cur)[:max_image_urls]
         except Exception as e:
@@ -797,6 +918,17 @@ class BrowserService:
 - 10번 액션(클릭/검색/스크롤 포함) 안에 정책 단서를 못 찾으면 matched=false로 종료한다.
         """.strip()
 
+        # ✅ "들어갔다가 딴짓" 방지: extract로 충분한 텍스트를 얻었으면 즉시 JSON 출력하고 종료
+        stop_after_extract_rules = """
+✅ 종료 규칙(매우 중요):
+- '이용안내/소개/가이드' 페이지라도, 도민리포터(청년 리포터) 모집/운영/선발/지원 관련 정보가 확인되면 그 페이지를 '최선의 공식 안내'로 간주하고 더 탐색하지 말고 즉시 JSON을 완성해 종료해라.
+- extract(페이지 텍스트 추출)를 한 번 성공했고, 그 텍스트에 아래 중 2개 이상이 포함되면 종료해라:
+  1) 도민리포터 또는 청년 리포터
+  2) 모집/선발/운영/활동/지원/신청/접수 중 하나 이상
+  3) 문의/담당/연락처/전화 중 하나 이상
+- 위 조건을 만족하지 못하면 계속 탐색하되, 후보 페이지는 최대 5개까지만 열어라.
+        """.strip()
+
         task = f"""
 너는 대한민국 청년정책을 분석하는 전문 에이전트야.
 
@@ -819,10 +951,12 @@ class BrowserService:
 
 {anti_loop_rules}
 
+{stop_after_extract_rules}
+
 추가 지시(파일 다운로드/이미지 URL):
 - 공고문/첨부파일/신청서 다운로드 버튼이 있으면 클릭해서 실제로 파일 다운로드를 시도해라.
 - 다운로드가 발생하면 그 파일명(확장자 포함)을 required_documents에 포함해라.
-- 포스터/본문에 이미지가 있으면 이미지 URL(src/og:image)을 찾아 image_urls에 담아라.
+- (중요) 포스터/카드뉴스/본문 이미지가 있으면 "다운로드하지 말고" 이미지 URL(src/og:image/a href의 jpg/png 등)만 찾아 image_urls에 담아라.
 
 작업 단계:
 1. 지정된 URL로 이동한다.
@@ -894,6 +1028,13 @@ class BrowserService:
 - 10번 액션(클릭/검색/스크롤 포함) 안에 정책 단서를 못 찾으면 matched=false로 종료한다.
         """.strip()
 
+        stop_after_extract_rules = """
+✅ 종료 규칙(매우 중요):
+- 힌트 경로를 따라가서 '이용안내/소개/가이드' 성격 페이지에 도달하더라도,
+  도민리포터(청년 리포터) 모집/운영/선발/신청/문의 정보가 확인되면 그 페이지에서 추출하고 즉시 JSON을 완성해 종료해라.
+- extract를 한 번 성공했고, 텍스트에 (도민리포터/청년리포터) + (신청/접수/모집/선발/운영/활동) 중 1개 이상이 있으면 종료해라.
+        """.strip()
+
         path_hint = json.dumps(navigation_path, ensure_ascii=False)
 
         task = f"""
@@ -918,10 +1059,12 @@ class BrowserService:
 
 {anti_loop_rules}
 
+{stop_after_extract_rules}
+
 추가 지시(파일 다운로드/이미지 URL):
 - 공고문/첨부파일/신청서 다운로드 버튼이 있으면 클릭해서 실제로 파일 다운로드를 시도해라.
 - 다운로드가 발생하면 그 파일명(확장자 포함)을 required_documents에 포함해라.
-- 포스터/본문에 이미지가 있으면 이미지 URL(src/og:image)을 찾아 image_urls에 담아라.
+- ✅ (중요) 포스터/카드뉴스/본문 이미지가 있으면 "다운로드하지 말고" 이미지 URL(src/og:image/a href의 jpg/png 등)만 찾아 image_urls에 담아라.
 
 작업 단계:
 1. URL로 이동한다.

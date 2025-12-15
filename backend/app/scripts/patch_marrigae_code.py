@@ -1,7 +1,7 @@
 import pandas as pd
 import re
 
-FILE = "C:/POLYSTEP/policies_cleaned_final.csv"
+FILE = "C:/POLYSTEP/policies_cleaned_final_gangwon_only.csv"
 
 MARRIAGE_MAP = {
     "55001": "미혼",
