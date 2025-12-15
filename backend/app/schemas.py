@@ -154,3 +154,57 @@ class UserGuideResponse(BaseModel):
     contact: Dict[str, Any] = {}
     missing_info: List[str] = []
     evidence_text: Optional[str] = None
+    
+class ScholarshipBase(BaseModel):
+    name: str
+    category: Optional[str] = None
+    selection_criteria: Optional[str] = None
+    retention_condition: Optional[str] = None
+    benefit: Optional[str] = None
+    source_url: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class ScholarshipCreate(ScholarshipBase):
+    pass
+
+
+class ScholarshipUpdate(BaseModel):
+    category: Optional[str] = None
+    selection_criteria: Optional[str] = None
+    retention_condition: Optional[str] = None
+    benefit: Optional[str] = None
+    source_url: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class ScholarshipRead(ScholarshipBase):
+    id: int
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class ScholarshipSearchRequest(BaseModel):
+    query: Optional[str] = None       # name/criteria/condition/benefit 부분검색
+    category: Optional[str] = None
+    limit: int = 50
+    offset: int = 0
+
+
+class ScholarshipCommonRuleRead(BaseModel):
+    id: int
+    title: str
+    content: str
+    source_url: Optional[str] = None
+    created_at: datetime | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class ScholarshipBundleResponse(BaseModel):
+    scholarships: List[ScholarshipRead]
+    common_rules: List[ScholarshipCommonRuleRead]

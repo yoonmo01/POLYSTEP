@@ -127,3 +127,41 @@ class PolicyVerification(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     policy = relationship("Policy", back_populates="verifications")
+
+class Scholarship(Base):
+    __tablename__ = "scholarships"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # 장학금 명칭(중복 방지)
+    name = Column(String(255), unique=True, index=True, nullable=False)
+
+    # 분류(성적/복지/근로/SW/국제/기타 등)
+    category = Column(String(64), index=True, nullable=True)
+
+    # 원문 수준 텍스트(네 CSV 4컬럼을 그대로 저장)
+    selection_criteria = Column(Text, nullable=True)  # 선발기준
+    retention_condition = Column(Text, nullable=True) # 유지조건
+    benefit = Column(Text, nullable=True)             # 지급액
+
+    # 출처/메타
+    source_url = Column(String(1024), nullable=True)  # 예: 한림대 장학금 안내 페이지
+    notes = Column(Text, nullable=True)               # 추가 메모
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ScholarshipCommonRule(Base):
+    __tablename__ = "scholarship_common_rules"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # 공통규정 제목/내용
+    title = Column(String(255), nullable=False)   # 예: "최소 이수학점 기준"
+    content = Column(Text, nullable=False)        # 예: "의과대학 제외 15학점 ..."
+
+    # 출처
+    source_url = Column(String(1024), nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
