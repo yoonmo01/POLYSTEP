@@ -45,15 +45,30 @@ def list_scholarships(
     return q.order_by(Scholarship.id.asc()).offset(offset).limit(limit).all()
 
 
+# ✅ 고정 라우트들은 동적 라우트("/{scholarship_id}")보다 위에!
 @router.get("/bundle", response_model=ScholarshipBundleResponse)
 def get_bundle(
     db: Session = Depends(get_db),
 ):
     scholarships = db.query(Scholarship).order_by(Scholarship.id.asc()).all()
-    rules = db.query(ScholarshipCommonRule).order_by(ScholarshipCommonRule.id.asc()).all()
+    rules = (
+        db.query(ScholarshipCommonRule)
+        .order_by(ScholarshipCommonRule.id.asc())
+        .all()
+    )
     return ScholarshipBundleResponse(
         scholarships=scholarships,
         common_rules=rules,
+    )
+
+
+# ✅ 422 방지: "/common-rules"를 "/{scholarship_id}"보다 위로 이동
+@router.get("/common-rules", response_model=List[ScholarshipCommonRuleRead])
+def list_common_rules(db: Session = Depends(get_db)):
+    return (
+        db.query(ScholarshipCommonRule)
+        .order_by(ScholarshipCommonRule.id.asc())
+        .all()
     )
 
 
@@ -123,10 +138,3 @@ def delete_scholarship(
     db.delete(row)
     db.commit()
     return {"ok": True}
-
-
-# ---- Common Rules ----
-
-@router.get("/common-rules", response_model=List[ScholarshipCommonRuleRead])
-def list_common_rules(db: Session = Depends(get_db)):
-    return db.query(ScholarshipCommonRule).order_by(ScholarshipCommonRule.id.asc()).all()
