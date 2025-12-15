@@ -24,6 +24,7 @@
 
 .home-nav {
   display: flex;
+  align-items: center;   /* ✅ 세로 정렬 맞추기 */
   gap: 16px;
 }
 
@@ -35,12 +36,38 @@
   border-radius: 999px;
   border: 1px solid rgba(229, 237, 255, 0.2);
   transition: background 0.2s ease, transform 0.1s ease, border-color 0.2s ease;
+  display: inline-flex;
+  align-items: center;
 }
 
 .nav-link:hover {
   background: rgba(15, 76, 129, 0.8);
   border-color: rgba(229, 237, 255, 0.6);
   transform: translateY(-1px);
+}
+
+.nav-btn {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #e5edff;
+
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(229, 237, 255, 0.2);
+  background: rgba(10, 30, 60, 0.35);
+  white-space: nowrap;
+}
+
+.nav-greet {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 8px 14px; 
+  color: inherit;  
+  font: inherit;   
+  line-height: 1;
 }
 
 /* 메인 히어로 영역 */

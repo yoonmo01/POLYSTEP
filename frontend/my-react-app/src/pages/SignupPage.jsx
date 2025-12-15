@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import "./ProfilePage.css";
+import { useNavigate, Link } from "react-router-dom";
+import { setUser } from "../auth";
+import "./SignupPage.css";
 
-function ProfilePage() {
+function SignupPage() {
   const navigate = useNavigate();
   const [form, setForm] = useState({
     name: "",
@@ -20,35 +21,32 @@ function ProfilePage() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-
-    if (form.password && form.password !== form.passwordConfirm) {
+    if (form.password !== form.passwordConfirm) {
       alert("비밀번호와 비밀번호 확인이 일치하지 않습니다.");
       return;
     }
 
-    console.log("프로필 정보:", form);
-    // TODO: 나중에 전역 상태 / 백엔드 연동
+    setUser({ name: form.name, email: form.email, age: form.age, region: form.region });
 
-    navigate("/question");
+    navigate("/");
   };
 
+
   return (
-    <div className="profile-page">
-      <div className="profile-shell">
-        <section className="profile-card">
-          <div className="profile-header">
-            <span className="profile-step">STEP 1 · 기본 프로필</span>
-            <h1 className="profile-title">나를 위한 정책 추천을 준비할게요</h1>
-            <p className="profile-subtitle">
-              폴리스탭이 추천을 만들 수 있도록
-              <br className="only-mobile" />
-              기본 정보를 간단히 입력해 주세요.
+    <div className="auth-page">
+      <div className="auth-shell">
+        <section className="auth-card">
+          <div className="auth-header">
+            <span className="auth-step">SIGN UP</span>
+            <h1 className="auth-title">회원가입을 진행할게요</h1>
+            <p className="auth-subtitle">
+              계정 정보 + 기본 정보(나이/거주지역)만 입력하면 완료됩니다.
             </p>
           </div>
 
-          <form className="profile-form" onSubmit={handleSubmit}>
-            <div className="profile-grid">
-              <div className="profile-field">
+          <form className="auth-form" onSubmit={handleSubmit}>
+            <div className="auth-grid">
+              <div className="auth-field">
                 <label htmlFor="name">이름</label>
                 <input
                   id="name"
@@ -61,7 +59,7 @@ function ProfilePage() {
                 />
               </div>
 
-              <div className="profile-field">
+              <div className="auth-field">
                 <label htmlFor="email">이메일</label>
                 <input
                   id="email"
@@ -74,7 +72,7 @@ function ProfilePage() {
                 />
               </div>
 
-              <div className="profile-field">
+              <div className="auth-field">
                 <label htmlFor="password">비밀번호</label>
                 <input
                   id="password"
@@ -83,10 +81,11 @@ function ProfilePage() {
                   value={form.password}
                   onChange={handleChange}
                   placeholder="로그인용 비밀번호"
+                  required
                 />
               </div>
 
-              <div className="profile-field">
+              <div className="auth-field">
                 <label htmlFor="passwordConfirm">비밀번호 확인</label>
                 <input
                   id="passwordConfirm"
@@ -95,10 +94,12 @@ function ProfilePage() {
                   value={form.passwordConfirm}
                   onChange={handleChange}
                   placeholder="다시 한 번 입력"
+                  required
                 />
               </div>
 
-              <div className="profile-field">
+              {/* ✅ 추가: 나이 + 거주지역만 */}
+              <div className="auth-field">
                 <label htmlFor="age">나이</label>
                 <input
                   id="age"
@@ -108,10 +109,11 @@ function ProfilePage() {
                   value={form.age}
                   onChange={handleChange}
                   placeholder="예: 24"
+                  required
                 />
               </div>
 
-              <div className="profile-field">
+              <div className="auth-field">
                 <label htmlFor="region">거주 지역</label>
                 <input
                   id="region"
@@ -120,18 +122,21 @@ function ProfilePage() {
                   value={form.region}
                   onChange={handleChange}
                   placeholder="예: 강원도 춘천시"
+                  required
                 />
               </div>
             </div>
 
-            <div className="profile-footer">
-              <p className="profile-hint">
-                입력한 정보는 추천 정책 계산에만 사용되며,
-                <br className="only-mobile" />
-                언제든지 마이페이지에서 수정할 수 있어요.
+            <div className="auth-footer">
+              <p className="auth-hint">
+                이미 계정이 있나요?{" "}
+                <Link to="/login" className="auth-link">
+                  로그인
+                </Link>
               </p>
-              <button type="submit" className="profile-submit-btn">
-                다음 단계로 이동하기
+
+              <button type="submit" className="auth-submit-btn">
+                회원가입 완료
               </button>
             </div>
           </form>
@@ -141,4 +146,4 @@ function ProfilePage() {
   );
 }
 
-export default ProfilePage;
+export default SignupPage;
