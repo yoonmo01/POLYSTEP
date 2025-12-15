@@ -1,24 +1,52 @@
+//frontend/my-react-app/src/pages/LoginPage.jsx
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { setUser } from "../auth";
+import { setUser, setToken } from "../auth";
 import "./LoginPage.css";
 
 function LoginPage() {
   const navigate = useNavigate();
   const [form, setForm] = useState({ email: "", password: "" });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const API_BASE_URL =
+    import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+
+  const loginRequest = async ({ email, password }) => {
+    const res = await fetch(`${API_BASE_URL}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(data?.detail || "로그인에 실패했습니다.");
+    return data; // { access_token, token_type }
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // TODO: 나중에 서버 응답으로 name/email 받기
-    setUser({ name: "홍길동", email: form.email });
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
-    navigate("/");
+    try {
+      const tokenRes = await loginRequest(form);
+      setToken(tokenRes.access_token);
+
+      // ✅ 백엔드에 /auth/me가 아직 없어서, UI 표시용 user는 최소 정보로 저장
+      setUser({ name: "사용자", email: form.email });
+
+      navigate("/");
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -72,8 +100,8 @@ function LoginPage() {
                 </Link>
               </p>
 
-              <button type="submit" className="auth-submit-btn">
-                로그인
+              <button type="submit" className="auth-submit-btn" disabled={isSubmitting}>
+                {isSubmitting ? "로그인 중..." : "로그인"}
               </button>
             </div>
           </form>

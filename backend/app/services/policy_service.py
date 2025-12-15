@@ -1,6 +1,7 @@
 #app/services/policy_service.py
 from typing import List, Optional
-from sqlalchemy import func
+import re
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.models import Policy, PolicyVerification
@@ -14,6 +15,31 @@ from app.services.llm_service import LLMService
 
 
 class PolicyService:
+    @staticmethod
+    def _normalize_text(s: str) -> str:
+        # 비교용 정규화: 공백/구분기호 제거
+        return (s or "").strip().replace(" ", "").replace("·", "").replace("/", "")
+
+    @staticmethod
+    def _extract_tokens_from_query(query: str) -> List[str]:
+        """
+        프론트에서 query를 '소득:1000만원 | 취업상태:... | 특화:...'처럼 보낼 때,
+        title 매칭이 거의 불가능하니, 검색에 쓸 토큰만 뽑는다.
+        """
+        if not query:
+            return []
+
+        q = query.replace("|", " ").replace(":", " ").replace("/", " ")
+        # 라벨 제거
+        q = re.sub(r"(소득|취업상태|특화)\s*", " ", q)
+        # 숫자/단위 제거
+        q = re.sub(r"\d+", " ", q)
+        q = q.replace("만원", " ").replace("만", " ")
+
+        tokens = [t.strip() for t in q.split() if t.strip()]
+        tokens = [t for t in tokens if len(t) >= 2]
+        # 토큰 너무 많으면 과도한 OR 조건이 되니 제한
+        return tokens[:6]
     @staticmethod
     def _rag_search_policies(
         db: Session,
@@ -29,21 +55,26 @@ class PolicyService:
         """
         q = db.query(Policy)
 
-        # --- 제목 검색: 공백 제거 후 부분 매칭 ---
-        if req.query:
-            # 사용자 입력에서 공백 제거 (청년 수당 -> 청년수당)
-            normalized_query = req.query.replace(" ", "")
-            # title에서 공백 제거해서 비교 (서울 청년 수당 -> 서울청년수당)
-            title_no_space = func.replace(Policy.title, " ", "")
-            q = q.filter(title_no_space.ilike(f"%{normalized_query}%"))
-
         # --- 지역: 부분 매칭 ---
         if req.region:
             q = q.filter(Policy.region.ilike(f"%{req.region}%"))
 
-        # --- 카테고리: 부분 매칭 (소득 -> 소득·생활) ---
+        # --- 카테고리: category/category_l/category_m 모두 느슨 매칭 + 정규화 매칭 ---
         if req.category:
-            q = q.filter(Policy.category.ilike(f"%{req.category}%"))
+            cat_raw = (req.category or "").strip()
+            cat_norm = PolicyService._normalize_text(cat_raw)
+
+            # DB 저장값이 "교육/훈련", "교육·훈련", "교육훈련" 등으로 다양할 수 있으니 넓게 매칭
+            q = q.filter(
+                or_(
+                    Policy.category.ilike(f"%{cat_raw}%"),
+                    Policy.category_l.ilike(f"%{cat_raw}%"),
+                    Policy.category_m.ilike(f"%{cat_raw}%"),
+                    func.replace(func.replace(func.replace(Policy.category, " ", ""), "·", ""), "/", "").ilike(f"%{cat_norm}%"),
+                    func.replace(func.replace(func.replace(Policy.category_l, " ", ""), "·", ""), "/", "").ilike(f"%{cat_norm}%"),
+                    func.replace(func.replace(func.replace(Policy.category_m, " ", ""), "·", ""), "/", "").ilike(f"%{cat_norm}%"),
+                )
+            )
 
         # --- 나이: age_min / age_max 범위에 들어가는지 체크 ---
         if req.age is not None:
@@ -52,8 +83,30 @@ class PolicyService:
                 (Policy.age_max.is_(None) | (Policy.age_max >= req.age)),
             )
 
-        # 일단 상위 20개만
-        return q.limit(20).all()
+        # --- query 검색: 조건묶음이면 토큰화해서 raw_text/keywords까지 확장 ---
+        if req.query:
+            tokens = PolicyService._extract_tokens_from_query(req.query)
+
+            if tokens:
+                token_filters = []
+                for t in tokens:
+                    token_filters.extend([
+                        Policy.title.ilike(f"%{t}%"),
+                        Policy.raw_text.ilike(f"%{t}%"),
+                        Policy.keywords.ilike(f"%{t}%"),
+                        Policy.raw_snippet.ilike(f"%{t}%"),
+                        Policy.raw_expln.ilike(f"%{t}%"),
+                        Policy.raw_support.ilike(f"%{t}%"),
+                    ])
+                q = q.filter(or_(*token_filters))
+            else:
+                # 일반 검색어면 기존 title 공백제거 매칭 유지
+                normalized_query = req.query.replace(" ", "")
+                title_no_space = func.replace(Policy.title, " ", "")
+                q = q.filter(title_no_space.ilike(f"%{normalized_query}%"))
+
+        # 후보는 조금 넓게
+        return q.limit(50).all()
 
     @staticmethod
     def search_policies(
@@ -137,9 +190,9 @@ class PolicyService:
         """
         q = db.query(Policy).filter(Policy.id != base.id)
 
-        # 같은 대분류(category) 우선 필터 (너무 좁으면 주석 처리해서 완화 가능)
+        # 같은 대분류(category) 우선 필터: "=="는 너무 빡세서 ilike로 완화
         if base.category:
-            q = q.filter(Policy.category == base.category)
+            q = q.filter(Policy.category.ilike(f"%{base.category.strip()}%"))
 
         candidates = q.all()
 

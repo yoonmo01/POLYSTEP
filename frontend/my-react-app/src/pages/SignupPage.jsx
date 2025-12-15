@@ -1,10 +1,36 @@
+//frontend/my-react-app/src/pages/SignupPage.jsx
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { setUser } from "../auth";
+import { setUser, setToken } from "../auth";
 import "./SignupPage.css";
 
 function SignupPage() {
   const navigate = useNavigate();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const API_BASE_URL =
+    import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+
+  const registerRequest = async ({ email, password, full_name }) => {
+    const res = await fetch(`${API_BASE_URL}/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, full_name }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(data?.detail || "회원가입에 실패했습니다.");
+    return data; // UserRead
+  };
+
+  const loginRequest = async ({ email, password }) => {
+    const res = await fetch(`${API_BASE_URL}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(data?.detail || "로그인에 실패했습니다.");
+    return data; // { access_token, token_type }
+  };
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -19,16 +45,45 @@ function SignupPage() {
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (form.password !== form.passwordConfirm) {
       alert("비밀번호와 비밀번호 확인이 일치하지 않습니다.");
       return;
     }
 
-    setUser({ name: form.name, email: form.email, age: form.age, region: form.region });
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
-    navigate("/");
+    try {
+      // 1) 회원가입
+      await registerRequest({
+        email: form.email,
+        password: form.password,
+        full_name: form.name,
+      });
+
+      // 2) 자동 로그인 → 토큰 저장
+      const tokenRes = await loginRequest({
+        email: form.email,
+        password: form.password,
+      });
+      setToken(tokenRes.access_token);
+
+      // 3) UI/필터용 프로필 로컬 저장 (age/region은 프론트에서만 사용 가능)
+      setUser({
+        name: form.name,
+        email: form.email,
+        age: form.age,
+        region: form.region,
+      });
+
+      navigate("/");
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
 
@@ -135,8 +190,8 @@ function SignupPage() {
                 </Link>
               </p>
 
-              <button type="submit" className="auth-submit-btn">
-                회원가입 완료
+              <button type="submit" className="auth-submit-btn" disabled={isSubmitting}>
+                {isSubmitting ? "가입 중..." : "회원가입 완료"}
               </button>
             </div>
           </form>

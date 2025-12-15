@@ -1,3 +1,4 @@
+//frontend/my-react-app/src/pages/MyPage.jsx
 import "./MyPage.css";
 import { useNavigate } from "react-router-dom";
 

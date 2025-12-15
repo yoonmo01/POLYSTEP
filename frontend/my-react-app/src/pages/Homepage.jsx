@@ -1,3 +1,4 @@
+//frontend/my-react-app/src/pages/Homepage.jsx
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import heroBg from "../assets/HomePage_BackGround.jpg";
