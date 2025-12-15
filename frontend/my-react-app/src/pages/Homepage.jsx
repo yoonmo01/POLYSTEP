@@ -1,9 +1,26 @@
-import React from "react";
-import { Link } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import heroBg from "../assets/HomePage_BackGround.jpg";
 import "./HomePage.css";
 
+import { getUser, clearUser } from "../auth";
+
 const HomePage = () => {
+  const navigate = useNavigate();
+  const [user, setUserState] = useState(getUser());
+
+  useEffect(() => {
+    const onStorage = () => setUserState(getUser());
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  const handleLogout = () => {
+    clearUser();
+    setUserState(null);
+    navigate("/");
+  };
+
   return (
     <div
       className="home"
@@ -17,16 +34,31 @@ const HomePage = () => {
     >
       <header className="home-header">
         <div className="home-logo">POLYSTEP</div>
+
         <nav className="home-nav">
-          <Link to="/mypage" className="nav-link">
-            마이페이지
-          </Link>
-          <Link to="/login" className="nav-link">
-            로그인
-          </Link>
-          <Link to="/signup" className="nav-link">
-            회원가입
-          </Link>
+          {user ? (
+            <>
+              <span className="nav-greet">안녕하세요, {user.name}님</span>
+              <button type="button" className="nav-link nav-btn" onClick={handleLogout}>
+                로그아웃
+              </button>
+              <Link to="/mypage" className="nav-link">
+                마이페이지
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link to="/mypage" className="nav-link">
+                마이페이지
+              </Link>
+              <Link to="/login" className="nav-link">
+                로그인
+              </Link>
+              <Link to="/signup" className="nav-link">
+                회원가입
+              </Link>
+            </>
+          )}
         </nav>
       </header>
 

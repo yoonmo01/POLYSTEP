@@ -75,6 +75,13 @@
   color: white;
 }
 
+/* 인사 텍스트 */
+.app-nav-greet {
+  color: #e5e7eb;
+  font-size: 0.85rem;
+  padding: 0.45rem 0.2rem;
+}
+
 /* 모바일 대응 */
 @media (max-width: 640px) {
   .app-nav {

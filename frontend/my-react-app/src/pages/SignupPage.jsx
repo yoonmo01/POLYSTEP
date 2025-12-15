@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { setUser } from "../auth";
 import "./SignupPage.css";
 
 function SignupPage() {
@@ -20,18 +21,16 @@ function SignupPage() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-
     if (form.password !== form.passwordConfirm) {
       alert("비밀번호와 비밀번호 확인이 일치하지 않습니다.");
       return;
     }
 
-    // TODO: 나중에 백엔드 회원가입 연동
-    console.log("회원가입 정보:", form);
+    setUser({ name: form.name, email: form.email, age: form.age, region: form.region });
 
-    // ✅ 회원가입 완료 → 홈
     navigate("/");
   };
+
 
   return (
     <div className="auth-page">

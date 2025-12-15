@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { setUser } from "../auth";
 import "./LoginPage.css";
 
 function LoginPage() {
@@ -14,10 +15,9 @@ function LoginPage() {
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    // TODO: 나중에 백엔드 로그인 연동
-    console.log("로그인 정보:", form);
+    // TODO: 나중에 서버 응답으로 name/email 받기
+    setUser({ name: "홍길동", email: form.email });
 
-    // ✅ 로그인 완료 → 홈
     navigate("/");
   };
 
