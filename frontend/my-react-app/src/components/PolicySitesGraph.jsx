@@ -394,54 +394,98 @@ export default function PolicySitesGraph({
         if (typeof prevDecay === "number") fg.d3VelocityDecay(prevDecay);
       }, 1200);
     });
-    fg.nodeCanvasObject((node, ctx, globalScale) => {
-      const x = finiteOr(node.x, 0);
-      const y = finiteOr(node.y, 0);
+      fg.nodeCanvasObject((node, ctx, globalScale) => {
+        const x = finiteOr(node.x, 0);
+        const y = finiteOr(node.y, 0);
 
-      const isHovered = hoverNode?.id === node.id;
-      const isNeighbor = neighborIds.has(node.id);
-      // 노드 크기 상향(가독성↑)
-      const baseR = node.kind === "hub" ? 28 : 20;
-      const r = isHovered ? baseR * 1.35 : isNeighbor ? baseR * 1.15 : baseR;
+        const isHovered = hoverNode?.id === node.id;
+        const isNeighbor = neighborIds.has(node.id);
+        // 노드 크기 상향(가독성↑)
+        const baseR = node.kind === "hub" ? 28 : 20;
+        const r = isHovered ? baseR * 1.35 : isNeighbor ? baseR * 1.15 : baseR;
 
-      if (!isFiniteNumber(r) || r <= 0) return;
+        if (!isFiniteNumber(r) || r <= 0) return;
 
-      const grad = ctx.createRadialGradient(
-        x - r * 0.25,
-        y - r * 0.25,
-        r * 0.2,
-        x,
-        y,
-        r
-      );
+        // --- iOS Style Design ---
 
-      if (node.kind === "hub") {
-        grad.addColorStop(0, "rgba(255, 255, 255, 0.35)");
-        grad.addColorStop(1, "rgba(59, 130, 246, 0.95)");
-      } else {
-        grad.addColorStop(0, "rgba(255, 255, 255, 0.25)");
-        grad.addColorStop(1, "rgba(148, 163, 184, 0.9)");
-      }
+        // 1. Gradients & Shadows
+        // 상단-좌측에서 하단-우측으로 떨어지는 부드러운 그라데이션
+        const gradient = ctx.createLinearGradient(x - r, y - r, x + r, y + r);
 
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, 2 * Math.PI, false);
-      ctx.fillStyle = grad;
-      ctx.fill();
+        if (node.kind === "hub") {
+          // Hub: iOS Blue (San Francisco Blue 느낌)
+          // Hover 시 조금 더 밝고 채도 높게
+          if (isHovered) {
+            gradient.addColorStop(0, "#60A5FA"); // Blue-400
+            gradient.addColorStop(1, "#2563EB"); // Blue-600
+            ctx.shadowColor = "rgba(37, 99, 235, 0.5)"; // Blue glow shadow
+          } else {
+            gradient.addColorStop(0, "#93C5FD"); // Blue-300
+            gradient.addColorStop(1, "#3B82F6"); // Blue-500
+            ctx.shadowColor = "rgba(0, 0, 0, 0.2)"; // Natural shadow
+          }
+        } else {
+          // Site: iOS System Gray / White (깔끔한 앱 아이콘 배경색)
+          if (isHovered) {
+            gradient.addColorStop(0, "#FFFFFF");
+            gradient.addColorStop(1, "#F1F5F9"); // Slate-100
+            ctx.shadowColor = "rgba(255, 255, 255, 0.4)"; // White glow
+          } else {
+            gradient.addColorStop(0, "#F8FAFC"); // Slate-50
+            gradient.addColorStop(1, "#CBD5E1"); // Slate-300
+            ctx.shadowColor = "rgba(0, 0, 0, 0.15)";
+          }
+        }
 
-      ctx.lineWidth = Math.max(1, 1.2 / globalScale);
-      ctx.strokeStyle = isHovered
-        ? "rgba(255, 255, 255, 0.9)"
-        : "rgba(226, 232, 255, 0.45)";
-      ctx.stroke();
+        // Drop Shadow (Elevation)
+        // iOS: 부드럽고 넓게 퍼지는 그림자로 깊이감 표현
+        ctx.shadowBlur = isHovered ? 16 : 8;
+        ctx.shadowOffsetY = isHovered ? 6 : 3;
 
-      const label = node.label ?? String(node.id);
-      const fontSize = clamp(12 / globalScale, 9, 16);
-      ctx.font = `${fontSize}px ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Apple SD Gothic Neo", sans-serif`;
-      ctx.fillStyle = "rgba(245, 247, 255, 0.92)";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "top";
-      ctx.fillText(label, x, y + r + 2 / globalScale);
-    });
+        // 2. Main Circle
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, 2 * Math.PI, false);
+        ctx.fillStyle = gradient;
+        ctx.fill();
+
+        // 3. Subtle Inner Highlight (Top Reflection)
+        // 위쪽에 살짝 맺히는 빛으로 볼륨감(Convex) 표현
+        ctx.shadowColor = "transparent"; // 그림자 끄고 하이라이트만
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetY = 0;
+
+        const highlightGrad = ctx.createLinearGradient(x, y - r, x, y);
+        highlightGrad.addColorStop(0, "rgba(255, 255, 255, 0.35)");
+        highlightGrad.addColorStop(0.5, "rgba(255, 255, 255, 0.05)");
+        highlightGrad.addColorStop(1, "rgba(255, 255, 255, 0)");
+
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, 2 * Math.PI, false); // 전체 덮되 그라데이션으로 상단만 보이게
+        ctx.fillStyle = highlightGrad;
+        ctx.fill();
+
+        // 4. Label
+        const label = node.label ?? String(node.id);
+        const fontSize = clamp(12 / globalScale, 14, 18);
+        // iOS 시스템 폰트 스택
+        ctx.font = `600 \${fontSize}px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Helvetica, Arial, sans-serif`;
+
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+
+        // 텍스트 가독성: 배경이 어두우므로 밝은 색 + 부드러운 그림자
+        ctx.shadowColor = "rgba(0, 0, 0, 0.4)";
+        ctx.shadowBlur = 3;
+        ctx.shadowOffsetY = 1;
+        ctx.fillStyle = "#FFFFFF";
+
+        ctx.fillText(label, x, y + r + 6 / globalScale);
+
+        // Reset
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetY = 0;
+      });
     fg.nodePointerAreaPaint((node, color, ctx) => {
       const x = finiteOr(node.x, 0);
       const y = finiteOr(node.y, 0);
