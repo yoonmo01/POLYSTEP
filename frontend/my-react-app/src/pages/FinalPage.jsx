@@ -1,95 +1,171 @@
+// frontend/my-react-app/src/pages/FinalPage.jsx
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import "./FinalPage.css";
-import { useNavigate } from "react-router-dom";
+
+const API_BASE =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 function FinalPage() {
   const navigate = useNavigate();
+  const { policyId } = useParams();
 
-  // TODO: 실제로는 ResultPage에서 선택한 정책 정보를 넘겨받도록 수정
-  const finalPolicy = {
-    title: "청년 주거 지원 바우처 (예시)",
-    agency: "국토교통부 · 지자체",
-    category: "생활·주거",
-    amount: "월 최대 20만 원",
-    period: "최대 2년 지원",
-    target: "만 19~34세 무주택 청년",
-    why: [
-      "입력한 연소득과 나이를 기준으로 우선순위가 높게 평가됐어요.",
-      "관심 분야로 선택한 ‘생활·주거’ 분야 정책과 잘 맞아요.",
-      "현재 취업 상태에서 신청 가능성이 높은 조건이에요.",
-    ],
-  };
+  const [policy, setPolicy] = useState(null);
+  const [verification, setVerification] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+
+        const [policyRes, verifyRes] = await Promise.all([
+          fetch(`${API_BASE}/policies/${policyId}`, { credentials: "include" }),
+          fetch(`${API_BASE}/policies/${policyId}/verification`, {
+            credentials: "include",
+          }),
+        ]);
+
+        if (!policyRes.ok) throw new Error("정책 정보를 불러올 수 없습니다.");
+        if (!verifyRes.ok) throw new Error("검증 결과를 불러올 수 없습니다.");
+
+        const policyData = await policyRes.json();
+        const verifyData = await verifyRes.json();
+
+        setPolicy(policyData);
+        setVerification(verifyData);
+      } catch (e) {
+        setError(e.message || "데이터 로딩 실패");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [policyId]);
+
+  if (loading) {
+    return <div className="final-page">로딩 중...</div>;
+  }
+
+  if (error) {
+    return (
+      <div className="final-page">
+        <p style={{ color: "red" }}>{error}</p>
+        <button onClick={() => navigate(-1)}>뒤로가기</button>
+      </div>
+    );
+  }
+
+  const ec = verification.extracted_criteria;
 
   return (
     <div className="final-page">
       <div className="final-shell">
         <header className="final-header">
-          <span className="final-step">STEP 4 · 최종 추천</span>
-          <h1 className="final-title">지금, 나에게 가장 잘 맞는 정책이에요</h1>
+          <span className="final-step">STEP 3 · 최종 추천</span>
+          <h1 className="final-title">{policy.title}</h1>
           <p className="final-subtitle">
-            입력한 프로필과 조건을 바탕으로
-            <br className="only-mobile" />
-            폴리스탭이 하나의 핵심 정책을 골라봤어요.
+            자동 검증 결과를 바탕으로 신청 절차를 정리했어요
           </p>
         </header>
 
-        <main className="final-main">
-          {/* 상단 메인 카드 */}
-          <section className="final-hero-card">
-            <div className="final-icon-circle">✨</div>
-            <p className="final-hero-label">나의 최종 추천 정책</p>
-            <h2 className="final-hero-title">{finalPolicy.title}</h2>
-            <p className="final-hero-meta">
-              {finalPolicy.category} · {finalPolicy.agency}
-            </p>
-
-            <div className="final-hero-info-row">
-              <div className="info-pill">
-                <span className="info-label">지원 금액</span>
-                <span className="info-value">{finalPolicy.amount}</span>
-              </div>
-              <div className="info-pill">
-                <span className="info-label">지원 기간</span>
-                <span className="info-value">{finalPolicy.period}</span>
-              </div>
-              <div className="info-pill long">
-                <span className="info-label">지원 대상</span>
-                <span className="info-value">{finalPolicy.target}</span>
-              </div>
+        {/* ✅ 신청 요약 */}
+        <section className="final-hero-card">
+          <div className="final-hero-info-row">
+            <div className="info-pill">
+              <span className="info-label">신청 방식</span>
+              <span className="info-value">{ec.apply_channel}</span>
             </div>
-          </section>
+            <div className="info-pill">
+              <span className="info-label">신청 기간</span>
+              <span className="info-value">{ec.apply_period}</span>
+            </div>
+            <div className="info-pill long">
+              <span className="info-label">문의</span>
+              <span className="info-value">
+                {ec.contact?.org} · {ec.contact?.tel}
+              </span>
+            </div>
+          </div>
+        </section>
 
-          {/* 왜 이 정책인지 설명 */}
-          <section className="final-why-card">
-            <h3 className="final-why-title">이 정책을 추천한 이유</h3>
-            <ul className="final-why-list">
-              {finalPolicy.why.map((reason, idx) => (
-                <li key={idx}>{reason}</li>
-              ))}
-            </ul>
-            <p className="final-why-hint">
-              실제 서비스에서는 정책 데이터와 추천 알고리즘을 연결해,
-              나에게 딱 맞는 정책을 자동으로 계산할 수 있어요.
-            </p>
-          </section>
+        {/* ✅ Step-by-Step 신청 절차 */}
+        <section className="final-steps">
+          <h3>신청 절차</h3>
+          <ol className="final-step-list">
+            {ec.apply_steps.map((step) => (
+              <li key={step.step} className="final-step-item">
+                <strong>
+                  STEP {step.step}. {step.title}
+                </strong>
+                <p>{step.detail}</p>
+                {step.url && (
+                  <a href={step.url} target="_blank" rel="noreferrer">
+                    바로가기 →
+                  </a>
+                )}
+              </li>
+            ))}
+          </ol>
+        </section>
 
-          {/* 다음 액션 */}
-          <section className="final-actions">
-            <button
-              type="button"
-              className="final-primary-btn"
-              onClick={() => navigate("/mypage")}
-            >
-              마이페이지에서 추천 결과 모아보기
-            </button>
-            <button
-              type="button"
-              className="final-secondary-btn"
-              onClick={() => navigate("/")}
-            >
-              처음으로 돌아가 다시 찾아보기
-            </button>
-          </section>
-        </main>
+        {/* ✅ 준비 서류 */}
+        <section className="final-docs">
+          <h3>필요 서류</h3>
+          <ul>
+            {ec.required_documents.map((doc, idx) => (
+              <li key={idx}>📄 {doc}</li>
+            ))}
+          </ul>
+        </section>
+
+        {/* ✅ 자격 요건 */}
+        <section className="final-criteria">
+          <h3>자격 요건 요약</h3>
+          <ul>
+            {Object.entries(ec.criteria).map(([key, val]) => (
+              <li key={key}>
+                <strong>{key}</strong>: {val}
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        {/* ✅ 근거 & 투명성 */}
+        <section className="final-evidence">
+          <h3>검증 근거</h3>
+          <pre>{verification.evidence_text}</pre>
+        </section>
+
+        {/* ✅ 네비게이션 경로 */}
+        <section className="final-path">
+          <h3>탐색 경로</h3>
+          <ol>
+            {verification.navigation_path.map((p, idx) => (
+              <li key={idx}>
+                [{p.action}] {p.label}
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        {/* 액션 */}
+        <section className="final-actions">
+          <button
+            className="final-primary-btn"
+            onClick={() => navigate("/mypage")}
+          >
+            마이페이지에 저장
+          </button>
+          <button
+            className="final-secondary-btn"
+            onClick={() => navigate("/")}
+          >
+            처음으로
+          </button>
+        </section>
       </div>
     </div>
   );

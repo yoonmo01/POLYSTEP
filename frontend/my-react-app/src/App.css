@@ -37,10 +37,19 @@
 }
 
 /* 오른쪽 버튼 영역 */
-.app-nav-right {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
+.app-nav-btn {
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-decoration: none;
+
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #e5e7eb;
+
+  transition: all 0.2s ease;
+  backdrop-filter: blur(6px);
 }
 
 .app-nav-btn:hover {
@@ -53,6 +62,24 @@
 .app-nav-btn:active {
   transform: translateY(0);
   box-shadow: 0 6px 12px rgba(15, 23, 42, 0.5);
+}
+
+.app-nav-btn-outline {
+  background: rgba(37, 99, 235, 0.15);
+  border: 1px solid rgba(37, 99, 235, 0.6);
+  color: #dbeafe;
+}
+
+.app-nav-btn-outline:hover {
+  background: rgba(37, 99, 235, 1);
+  color: white;
+}
+
+/* 인사 텍스트 */
+.app-nav-greet {
+  color: #e5e7eb;
+  font-size: 0.85rem;
+  padding: 0.45rem 0.2rem;
 }
 
 /* 모바일 대응 */
@@ -75,7 +102,7 @@
   }
 }
 
-/* 전체 앱 레이아웃 및 공통 스타일 */
+/*  === 전체 앱 레이아웃 및 공통 스타일  === */
 * {
   box-sizing: border-box;
 }

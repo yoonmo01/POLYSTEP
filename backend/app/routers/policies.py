@@ -1,7 +1,10 @@
 # app/routers/policies.py
 import asyncio
-from datetime import datetime  # 🔥 추가
+from datetime import datetime
 from typing import List, Optional
+import base64
+from typing import Awaitable, Callable, Optional as Opt
+import logging
 
 from fastapi import (
     APIRouter,
@@ -32,7 +35,7 @@ from app.services.policy_verification_service import PolicyVerificationService
 from app.services.llm_service import LLMService
 
 router = APIRouter()
-
+logger = logging.getLogger(__name__)
 
 # ===== Fast Track: 검색 & Eligibility =====
 @router.get("/search", response_model=List[PolicySearchResult])
@@ -58,9 +61,8 @@ def search_policies_with_similar(
     """
     result = PolicyService.search_policies_with_similars(db, req)
     if result is None:
-        raise HTTPException(status_code=404, detail="No policies found")
+        return SimilarPoliciesResponse(base_policy=None, similar_policies=[])
     return result
-
 @router.get("/{policy_id}", response_model=PolicyDetailResponse)
 def get_policy_detail(
     policy_id: int,
@@ -78,14 +80,23 @@ def get_policy_detail(
         .first()
     )
 
-    # 🔥 여기서 그냥 ORM 객체를 반환해도 됨
-    # PolicyRead / PolicyVerificationResponse 둘 다 from_attributes=True라
-    # Pydantic이 알아서 변환해준다.
+    verification_payload = None
+    if v:
+        verification_payload = {
+            "policy_id": policy_id,
+            "verification_id": v.id,  # ✅ 핵심: 스키마가 요구하는 이름으로 매핑
+            "status": PolicyVerificationStatusEnum(v.status),
+            "last_verified_at": v.last_verified_at,
+            "evidence_text": v.evidence_text,
+            "extracted_criteria": v.extracted_criteria,
+            "navigation_path": v.navigation_path,
+            "error_message": v.error_message,
+        }
+
     return {
         "policy": policy,
-        "verification": v,
+        "verification": verification_payload,
     }
-
 
 
 # ===== Fast Track: 기준 정책 + 유사 정책 5개 =====
@@ -197,97 +208,132 @@ def get_verification_result(
         error_message=v.error_message,
     )
 
-
-# ===== Deep Track: WebSocket (실시간 로그) =====
+# ===== Deep Track: WebSocket (실시간 로그 + 스크린샷) =====
 @router.websocket("/ws/{policy_id}/verify")
 async def ws_verify(websocket: WebSocket, policy_id: int):
     await websocket.accept()
 
-    from app.db import SessionLocal
-    db = SessionLocal()
+    done_event = asyncio.Event()
 
-    try:
-        policy = db.get(Policy, policy_id)
-        if not policy:
-            await websocket.send_json(
-                {"type": "error", "message": "Policy not found"}
-            )
-            await websocket.close()
-            return
+    # ✅ 안전 송신(끊긴 뒤 send로 터지는 것 방지)
+    async def safe_send(payload: dict) -> bool:
+        try:
+            await websocket.send_json(payload)
+            return True
+        except Exception:
+            return False
 
-        v = PolicyVerificationService.get_or_create_verification(db, policy_id)
-        v.status = PolicyVerificationStatus.PENDING.value
-        v.error_message = None
-        db.add(v)
-        db.commit()
-        db.refresh(v)
+    async def log_callback(msg: str):
+        ok = await safe_send({"type": "log", "message": msg})
+        if not ok:
+            raise WebSocketDisconnect()
 
-        async def log_callback(msg: str):
-            await websocket.send_json({"type": "log", "message": msg})
+    async def screenshot_callback(b64: str):
+        # ✅ 프론트/백엔드 키 불일치 방지: 둘 다 전송
+        ok = await safe_send({"type": "screenshot", "image": b64, "image_b64": b64})
+        if not ok:
+            raise WebSocketDisconnect()
 
-        async def job():
-            from app.services.browser_service import BrowserService
+    async def job():
+        from app.db import SessionLocal
+        from app.services.browser_service import BrowserService
 
-            try:
-                await log_callback("WebSocket 검증 작업 시작")
+        db = SessionLocal()
+        try:
+            policy = db.get(Policy, policy_id)
+            if not policy:
+                await safe_send({"type": "error", "message": "Policy not found"})
+                return
 
-                async def runner():
-                    navigation_path = v.navigation_path
-                    if navigation_path:
-                        return await BrowserService.verify_policy_with_playwright_shortcut(
-                            policy, navigation_path, log_callback
-                        )
-                    return await BrowserService.verify_policy_with_agent(
-                        policy, log_callback
-                    )
+            v = PolicyVerificationService.get_or_create_verification(db, policy_id)
+            v.status = PolicyVerificationStatus.PENDING.value
+            v.error_message = None
+            db.add(v)
+            db.commit()
+            db.refresh(v)
 
-                result = await runner()
+            await log_callback("WebSocket 검증 작업 시작")  # ✅ 이게 프론트에 떠야 정상
 
-                v.status = PolicyVerificationStatus.SUCCESS.value
-                v.extracted_criteria = {
-                    "criteria": result.get("criteria") or {},
-                    "required_documents": result.get("required_documents") or [],
-                    "apply_steps": result.get("apply_steps") or [],
-                    "apply_channel": result.get("apply_channel"),
-                    "apply_period": result.get("apply_period"),
-                    "contact": result.get("contact") or {},
-                }
-                v.evidence_text = result.get("evidence_text")
-                v.navigation_path = result.get("navigation_path")
-                v.last_verified_at = datetime.utcnow()
-                v.error_message = None
-
-                db.merge(v)
-                db.commit()
-
-                await websocket.send_json(
-                    {
-                        "type": "done",
-                        "status": "SUCCESS",
-                        "verification_id": v.id,
-                        "extracted_criteria": v.extracted_criteria,
-                        "evidence_text": v.evidence_text,
-                        "navigation_path": v.navigation_path,
-                    }
+            navigation_path = v.navigation_path
+            if navigation_path:
+                result = await BrowserService.verify_policy_with_playwright_shortcut(
+                    policy, navigation_path, log_callback, screenshot_callback
                 )
-            except Exception as e:
+            else:
+                result = await BrowserService.verify_policy_with_agent(
+                    policy, log_callback, screenshot_callback
+                )
+
+            v.status = PolicyVerificationStatus.SUCCESS.value
+            v.extracted_criteria = {
+                "criteria": result.get("criteria") or {},
+                "required_documents": result.get("required_documents") or [],
+                "apply_steps": result.get("apply_steps") or [],
+                "apply_channel": result.get("apply_channel"),
+                "apply_period": result.get("apply_period"),
+                "contact": result.get("contact") or {},
+            }
+            v.evidence_text = result.get("evidence_text")
+            v.navigation_path = result.get("navigation_path")
+            v.last_verified_at = datetime.utcnow()
+            v.error_message = None
+
+            db.merge(v)
+            db.commit()
+
+            await safe_send(
+                {
+                    "type": "done",
+                    "status": "SUCCESS",
+                    "verification_id": v.id,
+                    "extracted_criteria": v.extracted_criteria,
+                    "evidence_text": v.evidence_text,
+                    "navigation_path": v.navigation_path,
+                    "final_url": result.get("final_url")
+                    or result.get("source_url")
+                    or result.get("target_url"),
+                }
+            )
+
+        except WebSocketDisconnect:
+            # 프론트가 끊은 경우 조용히 종료
+            return
+        except Exception as e:
+            # ✅ 여기서 에러를 프론트에도 보내고, DB에도 기록
+            try:
+                v = PolicyVerificationService.get_or_create_verification(db, policy_id)
                 v.status = PolicyVerificationStatus.FAILED.value
                 v.error_message = str(e)
                 v.last_verified_at = datetime.utcnow()
                 db.merge(v)
                 db.commit()
+            except Exception:
+                pass
+            await safe_send({"type": "done", "status": "FAILED", "error": str(e)})
+        finally:
+            db.close()
+            done_event.set()
 
-                await websocket.send_json(
-                    {
-                        "type": "done",
-                        "status": "FAILED",
-                        "error": str(e),
-                    }
-                )
-            finally:
-                await websocket.close()
-                db.close()
+    task = asyncio.create_task(job())
 
-        asyncio.create_task(job())
+    # ✅ task에서 터진 예외를 서버 로그로 강제 출력(중요!)
+    def _on_done(t: asyncio.Task):
+        try:
+            exc = t.exception()
+            if exc:
+                logger.exception("[ws_verify] job task crashed: %s", exc)
+        except Exception:
+            pass
+
+    task.add_done_callback(_on_done)
+
+    try:
+        # ✅ ws 핸들러가 끝나면 연결도 끝나버릴 수 있음 → 끝날 때까지 대기
+        await done_event.wait()
     except WebSocketDisconnect:
-        db.close()
+        pass
+    finally:
+        try:
+            await websocket.close()
+        except Exception:
+            pass

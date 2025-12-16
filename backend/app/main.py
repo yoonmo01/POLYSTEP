@@ -1,3 +1,11 @@
+# app/main.py
+import sys
+import asyncio
+
+if sys.platform.startswith("win"):
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+print("EVENT LOOP POLICY =", type(asyncio.get_event_loop_policy()).__name__)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -7,7 +15,6 @@ from app.routers import auth, policies, scholarships
 # ✅ 여기 추가
 from app.db import Base, engine
 from app import models  # noqa: F401  # 모델 import 해서 Base에 모두 등록되도록
-
 
 def create_app() -> FastAPI:
     # ✅ 서버 시작할 때 테이블 자동 생성 (없으면 만들고, 있으면 무시)

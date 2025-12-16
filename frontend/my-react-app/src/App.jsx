@@ -1,4 +1,6 @@
-import { Routes, Route, Link, useLocation } from "react-router-dom";
+//frontend/my-react-app/src/App.jsx
+import { Routes, Route, Link, useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 
 import "./App.css";
 import HomePage from "./pages/Homepage";
@@ -8,13 +10,35 @@ import ResultPage from "./pages/ResultPage";
 import FinalPage from "./pages/FinalPage";
 import MyPage from "./pages/MyPage";
 
+import { getUser, clearUser } from "./auth";
+
 function App() {
   const location = useLocation();
+  const navigate = useNavigate();
   const isHome = location.pathname === "/";
+
+  const [user, setUserState] = useState(getUser());
+
+  // 다른 탭에서 로그아웃/로그인해도 동기화
+  useEffect(() => {
+    const onStorage = () => setUserState(getUser());
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  // 페이지 이동할 때도 localStorage 기준으로 한 번 갱신
+  useEffect(() => {
+    setUserState(getUser());
+  }, [location.pathname]);
+
+  const handleLogout = () => {
+    clearUser();
+    setUserState(null);
+    navigate("/");
+  };
 
   return (
     <>
-      {/* 홈이 아닐 때만 상단 네비게이션 표시 */}
       {!isHome && (
         <header className="app-header">
           <nav className="app-nav">
@@ -23,12 +47,29 @@ function App() {
             </Link>
 
             <div className="app-nav-right">
-              <Link to="/profile" className="app-nav-btn">
-                프로필 설정
-              </Link>
-              <Link to="/mypage" className="app-nav-btn app-nav-btn-outline">
-                마이페이지
-              </Link>
+              {user ? (
+                <>
+                  <span className="app-nav-greet">안녕하세요, {user.name}님</span>
+                  <button type="button" className="app-nav-btn" onClick={handleLogout}>
+                    로그아웃
+                  </button>
+                  <Link to="/mypage" className="app-nav-btn app-nav-btn-outline">
+                    마이페이지
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link to="/login" className="app-nav-btn">
+                    로그인
+                  </Link>
+                  <Link to="/signup" className="app-nav-btn">
+                    회원가입
+                  </Link>
+                  <Link to="/mypage" className="app-nav-btn app-nav-btn-outline">
+                    마이페이지
+                  </Link>
+                </>
+              )}
             </div>
           </nav>
         </header>
@@ -36,7 +77,8 @@ function App() {
 
       <Routes>
         <Route path="/" element={<HomePage />} />
-        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
         <Route path="/question" element={<QuestionPage />} />
         <Route path="/result" element={<ResultPage />} />
         <Route path="/final" element={<FinalPage />} />

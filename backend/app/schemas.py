@@ -2,7 +2,7 @@
 from datetime import datetime
 from enum import Enum
 from typing import Any, List, Optional, Dict
-
+from typing import Optional
 from pydantic import BaseModel, EmailStr
 
 
@@ -93,7 +93,7 @@ class SimilarPoliciesResponse(BaseModel):
     기준 정책 하나 + 유사 정책들 5개 정도를 한 번에 내려주는 응답 스키마.
     카드 UI 재사용을 위해 PolicySearchResult를 그대로 사용한다.
     """
-    base_policy: PolicySearchResult
+    base_policy: Optional[PolicySearchResult] = None
     similar_policies: List[PolicySearchResult]
 
 
