@@ -1,0 +1,55 @@
+.policy-graph {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: #f8fafc; /* 배경색 예시 */
+  cursor: grab;
+}
+
+.policy-graph:active {
+  cursor: grabbing;
+}
+
+.policy-graph-stage {
+  width: 100%;
+  height: 100%;
+}
+
+.policy-graph-tooltip {
+  position: absolute;
+  z-index: 10;
+  pointer-events: none; /* 마우스 이벤트가 툴팁을 통과하도록 설정 */
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(226, 232, 255, 0.8);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border-radius: 8px;
+  padding: 12px;
+  max-width: 280px;
+  transition: opacity 0.15s ease;
+  backdrop-filter: blur(4px);
+}
+
+.policy-graph-tooltip-title {
+  font-weight: 700;
+  font-size: 14px;
+  color: #1e293b;
+  margin-bottom: 4px;
+}
+
+.policy-graph-tooltip-body {
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.4;
+  word-break: keep-all;
+}
+
+.policy-graph-tooltip-hint {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #3b82f6;
+  font-weight: 500;
+}
+
+

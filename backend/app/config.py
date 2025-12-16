@@ -1,11 +1,13 @@
+from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import AnyUrl, Field
 
+BASE_DIR = Path(__file__).resolve().parents[2]  # app -> backend -> POLYSTEP
 
 class Settings(BaseSettings):
     # pydantic-settings v2 설정
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=f"{BASE_DIR}/.env",
         env_file_encoding="utf-8",
         extra="ignore",  # .env에 있어도 모델에 없는 값들은 무시
     )
@@ -14,11 +16,11 @@ class Settings(BaseSettings):
     app_name: str = "POLYSTEP_backend"
 
     # --- DB ---
-    database_url: AnyUrl  # .env의 database_url 사용
+    database_url: AnyUrl = Field(alias="DATABASE_URL")  # .env의 database_url 사용
 
     # --- JWT / Auth ---
     # .env에 있는 jwt_secret_key 값을 secret_key로 매핑
-    secret_key: str = Field(alias="jwt_secret_key")
+    secret_key: str = Field(alias="JWT_SECRET_KEY")
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24  # 1 day
 
