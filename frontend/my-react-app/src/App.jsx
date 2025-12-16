@@ -8,7 +8,8 @@ import QuestionPage from "./pages/QuestionPage";
 import ResultPage from "./pages/ResultPage";
 import FinalPage from "./pages/FinalPage";
 import MyPage from "./pages/MyPage";
-
+import LoginPage from "./pages/LoginPage";
+import SignupPage from "./pages/SignupPage";
 import { getUser, clearUser } from "./auth";
 
 function App() {
