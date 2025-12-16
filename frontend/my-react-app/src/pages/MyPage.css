@@ -1,3 +1,5 @@
+/* frontend/my-react-app/src/pages/MyPage.css */
+
 .mypage {
   min-height: 100vh;
   padding: 4rem 1.5rem 3rem;
@@ -40,6 +42,7 @@
     0 0 0 1px rgba(148, 163, 184, 0.25);
   border: 1px solid rgba(148, 163, 184, 0.42);
   color: #e5e7eb;
+  min-width: 0; /* ✅ grid item overflow 방지 */
 }
 
 .mypage-card-head {
@@ -51,320 +54,10 @@
 }
 
 .mypage-card-head h2 {
-  font-size: 1rem;
-  color: #f9fafb;
-}
-
-/* 상단 2열 레이아웃 */
-.mypage-top-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); /* ✅ 통일 */
-  gap: 1.4rem;
-}
-
-/* 프로필 카드 */
-.profile-info-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.8rem 1.2rem;
-}
-
-.profile-info-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-
-.profile-info-item .label {
-  font-size: 0.78rem;
-  color: #9ca3af;
-}
-
-.profile-info-item .value {
-  font-size: 0.9rem;
-  color: #e5e7eb;
-}
-
-.profile-hint {
-  margin-top: 0.9rem;
-  font-size: 0.78rem;
-  color: #9ca3af;
-}
-
-/* 버튼들 */
-.profile-edit-btn,
-.small-link-btn {
-  padding: 0.45rem 0.95rem;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.26);
-  background: rgba(255, 255, 255, 0.08);
-  color: #f9fafb;
-  font-size: 0.8rem;
-  cursor: pointer;
-  white-space: nowrap;
-  backdrop-filter: blur(6px);
-  transition:
-    background 0.18s ease,
-    border-color 0.18s ease,
-    transform 0.15s ease,
-    box-shadow 0.18s ease;
-}
-
-.profile-edit-btn:hover,
-.small-link-btn:hover {
-  background: rgba(255, 255, 255, 0.18);
-  border-color: rgba(255, 255, 255, 0.48);
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
-}
-
-/* 최근 추천 카드 */
-.recent-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-}
-
-.recent-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.6rem;
-  padding: 0.65rem 0.75rem;
-  border-radius: 12px;
-  background: rgba(15, 23, 42, 0.96);
-  border: 1px solid rgba(51, 65, 85, 0.9);
-}
-
-.recent-main {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-
-.recent-title {
-  font-size: 0.9rem;
-  color: #f9fafb;
-}
-
-.recent-meta {
-  font-size: 0.78rem;
-  color: #9ca3af;
-  display: flex;
-  gap: 0.3rem;
-  align-items: center;
-}
-
-.recent-status {
-  width: 40px;              /* ✅ 원형 고정 */
-  height: 25px;             /* ✅ 원형 고정 */
-  padding: 0;               /* ✅ padding 제거 (원형 깨짐 방지) */
-  border-radius: 999px;
-  display: inline-flex;     /* ✅ 가운데 정렬 */
-  align-items: center;
-  justify-content: center;
-
-  white-space: nowrap;      /* ✅ 줄바꿈 방지 (추↵천 방지) */
-  flex: 0 0 auto;           /* ✅ 찌그러짐 방지 */
-  line-height: 1;           /* ✅ 텍스트 수직 중심 */
-
-  font-size: 0.70rem;
-  font-weight: 900;
-
-  border: 1px solid rgba(191, 219, 254, 0.45);
-  background: rgba(15, 23, 42, 0.9);
-  color: #bfdbfe;
-}
-
-/* 빈 상태 */
-.empty-block {
-  font-size: 0.8rem;
-  color: #9ca3af;
-  padding: 0.9rem 0.3rem 0.3rem;
-}
-
-/* 하단 영역 */
-.mypage-bottom {
-  margin-top: 1.4rem;
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); /* ✅ 통일 */
-  gap: 1.4rem;
-}
-
-/* 히스토리 리스트 */
-.history-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.history-item {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.5rem 0.2rem;
-}
-
-.history-item .dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: #60a5fa;
-}
-
-.history-texts {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-}
-
-.history-title {
-  font-size: 0.86rem;
-  color: #e5e7eb;
-}
-
-.history-meta {
-  font-size: 0.78rem;
-  color: #9ca3af;
-}
-
-/* CTA 카드 */
-.mypage-cta-card {
-  background: radial-gradient(circle at top left, rgba(59, 130, 246, 0.25), rgba(15, 23, 42, 0.98));
-  border-radius: 20px;
-  padding: 1.7rem 1.7rem;
-  box-shadow:
-    0 24px 55px rgba(15, 23, 42, 0.95),
-    0 0 0 1px rgba(148, 163, 184, 0.3);
-  border: 1px solid rgba(148, 163, 184, 0.45);
-  color: #e5e7eb;
-}
-
-.mypage-cta-card h2 {
-  font-size: 1rem;
-  color: #f9fafb;
-  margin-bottom: 0.4rem;
-}
-
-.mypage-cta-card p {
-  font-size: 0.84rem;
-  color: #e5e7eb;
-}
-
-.mypage-cta-actions {
-  margin-top: 1rem;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-}
-
-/* CTA 버튼들 */
-.mypage-primary-btn,
-.mypage-secondary-btn {
-  border-radius: 999px;
-  padding: 0.6rem 1.4rem;
-  font-size: 0.84rem;
-  font-weight: 500;
-  cursor: pointer;
-  border: none;
-  white-space: nowrap;
-  transition:
-    background 0.16s ease,
-    transform 0.12s ease,
-    box-shadow 0.16s ease,
-    border-color 0.16s ease;
-}
-
-/* 메인 CTA */
-.mypage-primary-btn {
-  background: linear-gradient(to right, #2563eb, #4f46e5);
-  color: #f9fafb;
-  border: 1px solid rgba(191, 219, 254, 0.9);
-  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.95);
-}
-
-.mypage-primary-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 22px 44px rgba(15, 23, 42, 1);
-}
-
-/* 서브 CTA */
-.mypage-secondary-btn {
-  background: rgba(15, 23, 42, 0.9);
-  color: #e5e7eb;
-  border: 1px solid rgba(148, 163, 184, 0.8);
-}
-
-.mypage-secondary-btn:hover {
-  background: rgba(30, 64, 175, 0.9);
-  border-color: rgba(219, 234, 254, 1);
-  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.9);
-}
-
-/* 모바일 대응 */
-.only-mobile {
-  display: none;
-}
-
-@media (max-width: 960px) {
-  .mypage-top-grid,
-  .mypage-bottom {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-@media (max-width: 768px) {
-  .mypage {
-    padding: 4.25rem 1.2rem 2.5rem;
-  }
-
-  .mypage-title {
-    font-size: 1.3rem;
-  }
-
-  .mypage-subtitle {
-    font-size: 0.85rem;
-  }
-
-  .mypage-card,
-  .mypage-cta-card {
-    padding: 1.4rem 1.4rem;
-    border-radius: 18px;
-  }
-
-  .profile-info-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .mypage-cta-actions {
-    flex-direction: column;
-  }
-
-  .mypage-primary-btn,
-  .mypage-secondary-btn {
-    width: 100%;
-    text-align: center;
-  }
-
-  .only-mobile {
-    display: inline;
-  }
-}
-
-
-/* =========================
-   카드 헤더 타이포/정렬 통일
-   ========================= */
-.mypage-card-head h2 {
   font-size: 1.02rem;
   font-weight: 900;
   letter-spacing: 0.01em;
+  color: #f9fafb;
 }
 
 .subtle-count {
@@ -376,17 +69,19 @@
   background: rgba(2, 6, 23, 0.25);
 }
 
-/* =========================
-   상단 2열: 높이/밀도 맞추기
-   - 둘 다 같은 '최소 높이'를 갖게
-   ========================= */
-.mypage-top-grid > .mypage-card {
-  min-height: 230px; /* ✅ 최근본/프로필의 체감 크기 맞춤 */
+/* 상단 2열 레이아웃 */
+.mypage-top-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: 1.4rem;
 }
 
-/* =========================
-   프로필: 컴팩트 카드 (공허함 제거)
-   ========================= */
+/* ✅ 상단 카드 체감 크기 맞춤 */
+.mypage-top-grid > .mypage-card {
+  min-height: 230px;
+}
+
+/* 프로필: 컴팩트 */
 .profile-card-compact {
   padding: 1.35rem 1.45rem;
 }
@@ -451,34 +146,207 @@
   color: #e5e7eb;
 }
 
-.profile-hint-compact {
-  margin-top: 0.75rem;
-  margin-bottom: 0;
-  font-size: 0.78rem;
-  color: #9ca3af;
-  line-height: 1.45;
+/* 버튼들 */
+.profile-edit-btn,
+.small-link-btn {
+  padding: 0.45rem 0.95rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f9fafb;
+  font-size: 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+  backdrop-filter: blur(6px);
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    transform 0.15s ease,
+    box-shadow 0.18s ease;
 }
 
-/* =========================
-   최근 추천: row 카드 느낌 조금 강화
-   ========================= */
+.profile-edit-btn:hover,
+.small-link-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.48);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+}
+
+/* 최근 추천 카드 */
+.recent-scroll {
+  max-height: 520px;
+  overflow: auto;
+  padding-right: 6px;
+}
+
+.recent-details {
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 10px;
+  background: rgba(2, 6, 23, 0.12);
+}
+
+.recent-summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.recent-summary::-webkit-details-marker {
+  display: none;
+}
+
+.recent-summary-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.recent-summary-time {
+  font-weight: 900;
+}
+
+.recent-summary-sub {
+  opacity: 0.9;
+}
+
+.recent-details-body {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.recent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
 .recent-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px;
   background: rgba(2, 6, 23, 0.28);
   border: 1px solid rgba(148, 163, 184, 0.22);
+  min-width: 0; /* ✅ 텍스트 overflow 방지 */
+}
+
+.recent-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
 }
 
 .recent-title {
   margin: 0;
+  font-size: 0.9rem;
   font-weight: 800;
+  color: #f9fafb;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .recent-meta {
   margin: 0;
+  font-size: 0.78rem;
+  color: #9ca3af;
+  display: flex;
+  gap: 0.3rem;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
-/* =========================
-   최근 본 정책: 밋밋함 -> row card로
-   ========================= */
+.recent-status {
+  width: 40px;
+  height: 25px;
+  padding: 0;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  line-height: 1;
+  font-size: 0.70rem;
+  font-weight: 900;
+  border: 1px solid rgba(191, 219, 254, 0.45);
+  background: rgba(15, 23, 42, 0.9);
+  color: #bfdbfe;
+}
+
+/* 상태 뱃지 색상 */
+.recent-status.status-pass,
+.recent-status.status-success {
+  border-color: rgba(34,197,94,0.7);
+  background: rgba(34,197,94,0.15);
+  color: #bbf7d0;
+}
+
+.recent-status.status-warning,
+.recent-status.status-running {
+  border-color: rgba(245,158,11,0.7);
+  background: rgba(245,158,11,0.15);
+  color: #fde68a;
+}
+
+.recent-status.status-fail {
+  border-color: rgba(239,68,68,0.7);
+  background: rgba(239,68,68,0.15);
+  color: #fecaca;
+}
+
+.recent-status.status-recommend {
+  border-color: rgba(37,99,235,0.9);
+  background: linear-gradient(
+    to right,
+    rgba(37,99,235,0.25),
+    rgba(79,70,229,0.25)
+  );
+  color: #e0e7ff;
+}
+
+/* 빈 상태 */
+.empty-block {
+  font-size: 0.8rem;
+  color: #9ca3af;
+  padding: 0.9rem 0.3rem 0.3rem;
+}
+
+/* 하단 영역 */
+.mypage-bottom {
+  margin-top: 1.4rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: 1.4rem;
+}
+
+/* ✅ history 스크롤 영역 */
+.history-scroll {
+  max-height: 520px;
+  overflow: auto;
+  padding-right: 6px;
+}
+
+/* 히스토리 리스트 */
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
 .history-list-rows {
   gap: 0.6rem;
 }
@@ -492,6 +360,7 @@
   border-radius: 14px;
   background: rgba(2, 6, 23, 0.28);
   border: 1px solid rgba(148, 163, 184, 0.22);
+  min-width: 0;
 }
 
 .history-row-left {
@@ -501,15 +370,39 @@
   min-width: 0;
 }
 
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #60a5fa;
+  flex: 0 0 auto;
+}
+
+.history-texts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
 .history-title {
   margin: 0;
+  font-size: 0.86rem;
   font-weight: 800;
+  color: #e5e7eb;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .history-meta {
   margin: 0;
+  font-size: 0.78rem;
+  color: #9ca3af;
+  overflow-wrap: anywhere;
 }
 
+/* row 링크 버튼 */
 .row-link-btn {
   padding: 0.42rem 0.8rem;
   border-radius: 12px;
@@ -534,20 +427,111 @@
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
 }
 
-/* =========================
-   CTA 카드 문장 가독성 약간 업
-   ========================= */
+/* CTA 카드 */
+.mypage-cta-card {
+  background: radial-gradient(circle at top left, rgba(59, 130, 246, 0.25), rgba(15, 23, 42, 0.98));
+  border-radius: 20px;
+  padding: 1.7rem 1.7rem;
+  box-shadow:
+    0 24px 55px rgba(15, 23, 42, 0.95),
+    0 0 0 1px rgba(148, 163, 184, 0.3);
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  color: #e5e7eb;
+}
+
 .mypage-cta-card h2 {
   font-size: 1.05rem;
   font-weight: 900;
+  color: #f9fafb;
+  margin-bottom: 0.4rem;
 }
 
 .mypage-cta-card p {
+  font-size: 0.84rem;
+  color: #e5e7eb;
   opacity: 0.95;
   line-height: 1.55;
 }
 
+.mypage-cta-actions {
+  margin-top: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+/* CTA 버튼들 */
+.mypage-primary-btn,
+.mypage-secondary-btn {
+  border-radius: 999px;
+  padding: 0.6rem 1.4rem;
+  font-size: 0.84rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  white-space: nowrap;
+  transition:
+    background 0.16s ease,
+    transform 0.12s ease,
+    box-shadow 0.16s ease,
+    border-color 0.16s ease;
+}
+
+.mypage-primary-btn {
+  background: linear-gradient(to right, #2563eb, #4f46e5);
+  color: #f9fafb;
+  border: 1px solid rgba(191, 219, 254, 0.9);
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.95);
+}
+
+.mypage-primary-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 22px 44px rgba(15, 23, 42, 1);
+}
+
+.mypage-secondary-btn {
+  background: rgba(15, 23, 42, 0.9);
+  color: #e5e7eb;
+  border: 1px solid rgba(148, 163, 184, 0.8);
+}
+
+.mypage-secondary-btn:hover {
+  background: rgba(30, 64, 175, 0.9);
+  border-color: rgba(219, 234, 254, 1);
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.9);
+}
+
+/* 모바일 */
+.only-mobile {
+  display: none;
+}
+
+@media (max-width: 960px) {
+  .mypage-top-grid,
+  .mypage-bottom {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 @media (max-width: 768px) {
+  .mypage {
+    padding: 4.25rem 1.2rem 2.5rem;
+  }
+
+  .mypage-title {
+    font-size: 1.3rem;
+  }
+
+  .mypage-subtitle {
+    font-size: 0.85rem;
+  }
+
+  .mypage-card,
+  .mypage-cta-card {
+    padding: 1.4rem 1.4rem;
+    border-radius: 18px;
+  }
+
   .mypage-top-grid > .mypage-card {
     min-height: auto;
   }
@@ -561,32 +545,18 @@
     height: 40px;
     border-radius: 14px;
   }
-}
-/* 상태 뱃지 색상 */
-.recent-status.status-pass {
-  border-color: rgba(34,197,94,0.7);
-  background: rgba(34,197,94,0.15);
-  color: #bbf7d0;
-}
 
-.recent-status.status-warning {
-  border-color: rgba(245,158,11,0.7);
-  background: rgba(245,158,11,0.15);
-  color: #fde68a;
-}
+  .mypage-cta-actions {
+    flex-direction: column;
+  }
 
-.recent-status.status-fail {
-  border-color: rgba(239,68,68,0.7);
-  background: rgba(239,68,68,0.15);
-  color: #fecaca;
-}
+  .mypage-primary-btn,
+  .mypage-secondary-btn {
+    width: 100%;
+    text-align: center;
+  }
 
-.recent-status.status-recommend {
-  border-color: rgba(37,99,235,0.9); /* blue-600 */
-  background: linear-gradient(
-    to right,
-    rgba(37,99,235,0.25),
-    rgba(79,70,229,0.25)
-  );
-  color: #e0e7ff; /* indigo-100 */
+  .only-mobile {
+    display: inline;
+  }
 }

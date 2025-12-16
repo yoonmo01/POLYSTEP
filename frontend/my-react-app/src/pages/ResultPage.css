@@ -413,3 +413,33 @@
   background: rgba(148, 163, 184, 0.35);
   border-radius: 6px;
 }
+
+/* 그룹 라벨(기본정보/장학금정보/정책정보) */
+.tag-group-label {
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(148, 163, 184, 0.10);
+  color: #e5e7eb;
+  white-space: nowrap;
+}
+
+/* ✅ 기본정보 태그 */
+.result-tag.tag-basic {
+  border: 1px solid rgba(59, 130, 246, 0.45);
+  background: rgba(59, 130, 246, 0.14);
+}
+
+/* ✅ 장학금정보 태그 */
+.result-tag.tag-scholarship {
+  border: 1px solid rgba(168, 85, 247, 0.45);
+  background: rgba(168, 85, 247, 0.14);
+}
+
+/* ✅ 정책정보 태그 */
+.result-tag.tag-policy {
+  border: 1px solid rgba(34, 197, 94, 0.45);
+  background: rgba(34, 197, 94, 0.14);
+}

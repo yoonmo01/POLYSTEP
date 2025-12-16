@@ -164,15 +164,13 @@ function QuestionPage() {
         Authorization: `Bearer ${token}`,
       };
 
-      // ✅ 장학금 검색 파라미터 구성
+      // ✅ 장학금 추천(B안) 파라미터 구성
+      // - 이제 장학금은 /scholarships/recommend 로 호출해서 llm_card 포함된 결과를 받는다.
       const sQs = new URLSearchParams();
       if (scholarshipCategory) sQs.set("category", scholarshipCategory);
-
-      // 키워드가 없으면 전공/학적 기반으로 기본 키워드를 만들어도 됨(선택)
-      const kw = (scholarshipKeyword || "").trim();
-      if (kw) sQs.set("query", kw);
       sQs.set("limit", "5");
-      sQs.set("offset", "0");
+      // 필요하면 디버깅용: 캐시 무시하고 재생성
+      // sQs.set("force_llm", "true");
 
       setLoadingMsg("정책 + 장학금을 함께 찾는 중이에요...");
 
@@ -181,7 +179,7 @@ function QuestionPage() {
           method: "GET",
           headers,
         }),
-        fetch(`${API_BASE_URL}/scholarships?${sQs.toString()}`, {
+        fetch(`${API_BASE_URL}/scholarships/recommend?${sQs.toString()}`, {
           method: "GET",
           headers,
         }),
@@ -194,8 +192,11 @@ function QuestionPage() {
       }
 
       // 장학금은 실패해도 정책 UX 유지(조용히 빈 배열 처리)
-      const scholarshipData = await scholarshipRes.json().catch(() => []);
-      const scholarships = Array.isArray(scholarshipData) ? scholarshipData : [];
+      const scholarshipData = await scholarshipRes.json().catch(() => null);
+      // ✅ /scholarships/recommend 응답: { items: [...] }
+      const scholarships = Array.isArray(scholarshipData?.items)
+        ? scholarshipData.items
+        : [];
 
       // ✅ 응답에서 기준 1개 + 유사 정책들 합치고, "최대 5개만" 보여주기
       const base = policyData?.base_policy ? [policyData.base_policy] : [];
@@ -306,7 +307,7 @@ function QuestionPage() {
                 <div>
                   <p style={{ margin: 0, fontWeight: 700, fontSize: "1rem" }}>{loadingMsg || "불러오는 중..."}</p>
                   <p style={{ margin: "0.35rem 0 0", color: "rgba(226,232,240,0.8)", fontSize: "0.9rem" }}>
-                    잠시만 기다려 주세요. (검색/유사도 계산 중)
+                    잠시만 기다려 주세요. (검색중)
                   </p>
                 </div>
               </div>

@@ -1,6 +1,7 @@
 # app/routers/me.py
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, Depends, Query
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 
 from app.deps import get_db, get_current_user
@@ -17,6 +18,7 @@ from app.schemas import (
     RecommendationCreateRequest,
     RecommendationSessionResponse,
     RecommendationItemOut,
+    RecommendationSessionsResponse,
     ViewCreateRequest,
     ViewListResponse,
     ViewItemOut,
@@ -26,10 +28,21 @@ from app.schemas import (
 
 router = APIRouter()
 
+# ✅ KST 변환 유틸 (응답에서만 KST로 보여주기)
+KST = timezone(timedelta(hours=9))
+
+def to_kst_iso(dt: datetime | None) -> str | None:
+    if not dt:
+        return None
+    # DB가 timestamp without time zone이면 tzinfo=None로 들어올 가능성이 큼
+    # "UTC로 저장된 값"이라고 가정하고 UTC를 붙인 다음 KST로 변환
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(KST).isoformat(timespec="seconds")
+
 
 @router.get("", response_model=MeResponse)
 def get_me(user: User = Depends(get_current_user)):
-    # User 모델에는 full_name만 있어서 name으로 매핑
     return MeResponse(
         id=user.id,
         email=user.email,
@@ -51,16 +64,51 @@ def create_recommendation_session(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    # 1) 세션 생성
+    recent_dup = (
+        db.query(RecommendationSession)
+        .filter(
+            RecommendationSession.user_id == user.id,
+            RecommendationSession.created_at >= datetime.utcnow() - timedelta(seconds=15),
+        )
+        .order_by(RecommendationSession.created_at.desc())
+        .first()
+    )
+
+    if recent_dup and (recent_dup.conditions or {}) == (body.conditions or {}):
+        incoming_schs = body.scholarships or []
+
+        # 1) scholarships는 항상 최신으로 덮어쓰기
+        recent_dup.scholarships = incoming_schs
+        db.add(recent_dup)
+
+        # 2) items 업데이트: 기존 삭제 후 다시 저장(항상 최신 top5 유지)
+        db.query(RecommendationItem).filter(
+            RecommendationItem.session_id == recent_dup.id
+        ).delete(synchronize_session=False)
+
+        new_items = []
+        for r in body.results:
+            new_items.append(
+                RecommendationItem(
+                    session_id=recent_dup.id,
+                    policy_id=r.policy_id,
+                    badge_status=(r.badge_status.value if r.badge_status else None),
+                    score=r.score,
+                )
+            )
+        db.add_all(new_items)
+        db.commit()
+        return {"ok": True, "session_id": recent_dup.id, "deduped": True, "updated": True}
+
     sess = RecommendationSession(
         user_id=user.id,
         conditions=body.conditions or {},
+        scholarships=body.scholarships or [],
     )
     db.add(sess)
     db.commit()
     db.refresh(sess)
 
-    # 2) 아이템 생성 (Top5)
     items = []
     for r in body.results:
         items.append(
@@ -79,11 +127,9 @@ def create_recommendation_session(
 
 @router.get("/recommendations", response_model=RecommendationSessionResponse)
 def get_recent_recommendations(
-    limit: int = Query(1, ge=1, le=20),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    # 최신 세션 1개만 프론트에서 쓰는 형태(기본)
     sess = (
         db.query(RecommendationSession)
         .filter(RecommendationSession.user_id == user.id)
@@ -91,9 +137,8 @@ def get_recent_recommendations(
         .first()
     )
     if not sess:
-        return RecommendationSessionResponse(created_at=None, conditions=None, items=[])
+        return RecommendationSessionResponse(created_at=None, conditions=None, items=[], scholarships=[])
 
-    # 세션 아이템들 + 정책 join
     q = (
         db.query(RecommendationItem, Policy)
         .join(Policy, Policy.id == RecommendationItem.policy_id)
@@ -101,9 +146,8 @@ def get_recent_recommendations(
         .order_by(RecommendationItem.id.asc())
     )
 
-    items_out = []
+    items_out: List[RecommendationItemOut] = []
     for item, policy in q.all():
-        # ✅ 추천 저장 시점의 badge_status를 그대로 사용
         items_out.append(
             RecommendationItemOut(
                 policy_id=policy.id,
@@ -118,10 +162,64 @@ def get_recent_recommendations(
         )
 
     return RecommendationSessionResponse(
-        created_at=sess.created_at,
+        created_at=to_kst_iso(sess.created_at),   # ✅ KST ISO 문자열
         conditions=sess.conditions,
         items=items_out,
+        scholarships=sess.scholarships or [],
     )
+
+
+@router.get("/recommendations/history", response_model=RecommendationSessionsResponse)
+def get_recommendation_history(
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    sessions = (
+        db.query(RecommendationSession)
+        .filter(RecommendationSession.user_id == user.id)
+        .order_by(RecommendationSession.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    if not sessions:
+        return RecommendationSessionsResponse(sessions=[])
+
+    out_sessions: List[RecommendationSessionResponse] = []
+
+    for sess in sessions:
+        q = (
+            db.query(RecommendationItem, Policy)
+            .join(Policy, Policy.id == RecommendationItem.policy_id)
+            .filter(RecommendationItem.session_id == sess.id)
+            .order_by(RecommendationItem.id.asc())
+        )
+
+        items_out: List[RecommendationItemOut] = []
+        for item, policy in q.all():
+            items_out.append(
+                RecommendationItemOut(
+                    policy_id=policy.id,
+                    title=policy.title,
+                    category=policy.category,
+                    category_l=policy.category_l,
+                    category_m=policy.category_m,
+                    region=policy.region,
+                    badge_status=BadgeStatus(item.badge_status) if item.badge_status else None,
+                    score=item.score,
+                )
+            )
+
+        out_sessions.append(
+            RecommendationSessionResponse(
+                created_at=to_kst_iso(sess.created_at),  # ✅ KST ISO 문자열
+                conditions=sess.conditions,
+                items=items_out,
+                scholarships=sess.scholarships or [],
+            )
+        )
+
+    return RecommendationSessionsResponse(sessions=out_sessions)
 
 
 @router.post("/views")
@@ -130,10 +228,28 @@ def create_view(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    recent = (
+        db.query(PolicyView)
+        .filter(
+            PolicyView.user_id == user.id,
+            PolicyView.policy_id == body.policy_id,
+            PolicyView.viewed_at >= datetime.utcnow() - timedelta(minutes=3),
+        )
+        .order_by(PolicyView.viewed_at.desc())
+        .first()
+    )
+    if recent:
+        if body.scholarship:
+            recent.scholarship = body.scholarship
+            db.add(recent)
+            db.commit()
+        return {"ok": True, "view_id": recent.id}
+
     v = PolicyView(
         user_id=user.id,
         policy_id=body.policy_id,
         verification_id=body.verification_id,
+        scholarship=body.scholarship or None,
     )
     db.add(v)
     db.commit()
@@ -147,7 +263,6 @@ def get_views(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    # 최근 본 정책 = "검증하기 눌러서 기록된 것"
     views = (
         db.query(PolicyView)
         .filter(PolicyView.user_id == user.id)
@@ -158,17 +273,10 @@ def get_views(
     if not views:
         return ViewListResponse(items=[])
 
-    # policy join
     policy_ids = [x.policy_id for x in views]
-    policies = (
-        db.query(Policy)
-        .filter(Policy.id.in_(policy_ids))
-        .all()
-    )
+    policies = db.query(Policy).filter(Policy.id.in_(policy_ids)).all()
     policy_map = {p.id: p for p in policies}
 
-    # 각 policy의 최신 verification status도 같이 보여주고 싶으면:
-    # (정교하게 하려면 subquery로 최신만 뽑아야 하지만, 일단 간단히)
     ver_map = {}
     for pid in policy_ids:
         pv = (
@@ -180,7 +288,7 @@ def get_views(
         if pv:
             ver_map[pid] = pv.status
 
-    items_out = []
+    items_out: List[ViewItemOut] = []
     for x in views:
         p = policy_map.get(x.policy_id)
         if not p:
@@ -195,8 +303,9 @@ def get_views(
                 category_l=p.category_l,
                 category_m=p.category_m,
                 region=p.region,
-                viewed_at=x.viewed_at,
+                viewed_at=to_kst_iso(x.viewed_at),  # ✅ KST ISO 문자열
                 verification_status=PolicyVerificationStatusEnum(st) if st else None,
+                scholarship=getattr(x, "scholarship", None),
             )
         )
 

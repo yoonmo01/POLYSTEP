@@ -1,13 +1,14 @@
 #app/services/llm_service.py
 from typing import Any, Dict, List, Optional
 import logging
-
+import re
 import google.generativeai as genai
 import json
 
 from app.config import settings
 from app.schemas import BadgeStatus, PolicySearchRequest
-from app.models import Policy
+from app.models import Policy, Scholarship, ScholarshipLLMCache, User
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,100 @@ if settings.google_api_key:
 
 
 class LLMService:
+    # =========================
+    # ✅ Scholarships: very-light personalization (no LLM)
+    # =========================
+    @staticmethod
+    def evaluate_scholarship_user_fit(
+        user: User,
+        scholarship: Scholarship,
+        card_json: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        장학금 개인맞춤을 "빡빡하지 않게" 판단.
+        - PASS: 사용자 정보로 봤을 때 긍정 시그널이 있고, 명백한 충돌이 없음
+        - FAIL: 거의 없음(명백한 충돌일 때만)  ← 기본은 WARNING
+        - WARNING: 정보 부족/애매
+
+        반환:
+        {
+          "user_fit": "PASS"|"WARNING"|"FAIL",
+          "user_fit_reason": str|None,
+          "missing_info": [str, ...]
+        }
+        """
+        missing: List[str] = []
+        reasons: List[str] = []
+
+        # 1) 학생 여부: 장학금은 기본적으로 학생 대상이 많으니,
+        #    is_student가 False면 WARNING(또는 특정 케이스면 FAIL) 정도로만.
+        if user.is_student is None:
+            missing.append("학생 여부")
+        elif user.is_student is False:
+            # "재학생" 전용이라고 명백히 쓰인 경우만 FAIL로 만들고,
+            # 나머지는 WARNING로 둔다(빡빡하게 안 가기).
+            text = " ".join(
+                [
+                    scholarship.selection_criteria or "",
+                    scholarship.retention_condition or "",
+                    (card_json or {}).get("one_liner") or "",
+                    " ".join((card_json or {}).get("eligibility_bullets") or []),
+                ]
+            )
+            if any(k in text for k in ["재학생", "재학", "재학 중", "재학자"]):
+                return {
+                    "user_fit": "FAIL",
+                    "user_fit_reason": "재학생 대상 장학금으로 보이는데, 현재 학생이 아닌 것으로 설정되어 있어요.",
+                    "missing_info": [],
+                }
+            reasons.append("학생이 아니어도 지원 가능한지 확인이 필요해요")
+
+        # 2) 전공/학년: 있으면 이유에만 반영(매칭을 빡빡하게 하지 않음)
+        if not user.major:
+            missing.append("전공")
+        else:
+            reasons.append("전공 정보를 참고했어요")
+
+        if user.grade is None:
+            missing.append("학년")
+        else:
+            reasons.append("학년 정보를 참고했어요")
+
+        # 3) 학점(GPA): 카드에서 gpa_min이 있을 때만 비교
+        gpa_min = None
+        if isinstance(card_json, dict):
+            gm = card_json.get("gpa_min")
+            if isinstance(gm, (int, float)):
+                gpa_min = float(gm)
+
+        if user.gpa is None:
+            if gpa_min is not None:
+                missing.append("평점(GPA)")
+        else:
+            # gpa_min이 있으면 비교하되, 미달이라고 FAIL까지는 잘 안 내림(빡빡하지 않게)
+            if gpa_min is not None:
+                if float(user.gpa) >= gpa_min:
+                    reasons.append(f"평점({user.gpa})이 최소 기준({gpa_min}) 이상이에요")
+                else:
+                    reasons.append(f"평점({user.gpa})이 최소 기준({gpa_min})에 못 미칠 수 있어요")
+
+        # 4) 최종 user_fit 결정 (의도에 맞게 정리)
+        # - FAIL은 위에서 이미 return
+        # - missing_info가 있으면 WARNING
+        # - 명백한 충돌은 없고, 긍정 시그널이 있으며 missing이 없을 때만 PASS
+
+        if missing:
+            user_fit = "WARNING"
+        elif reasons:
+            user_fit = "PASS"
+        else:
+            user_fit = "WARNING"
+
+        return {
+            "user_fit": user_fit,
+            "user_fit_reason": " · ".join(reasons) if reasons else None,
+            "missing_info": missing,
+        }
     @staticmethod
     def _fallback_summary(
         req: PolicySearchRequest,
@@ -443,3 +538,197 @@ Deep facts(JSON):
         parsed.setdefault("evidence_text", evidence_text)
 
         return parsed
+    
+    # =========================
+    # ✅ Scholarships (B안): 카드형 요약 + 캐시
+    # =========================
+    SCHOLARSHIP_PROMPT_VERSION = 1
+
+    @staticmethod
+    def _build_scholarship_card_prompt(
+        scholarship: Scholarship,
+    ) -> str:
+        """
+        장학금 원문(선발/유지/지급액)을 카드형으로 '정리'하는 프롬프트.
+        - 사용자 맞춤 추천(스코어링)은 라우터/서비스에서 따로 해도 되고
+        여기서는 일단 "정리"에 집중(캐시 재사용 극대화).
+        """
+        selection = (scholarship.selection_criteria or "").strip()
+        retention = (scholarship.retention_condition or "").strip()
+        benefit = (scholarship.benefit or "").strip()
+        notes = (scholarship.notes or "").strip()
+
+        # 너무 길면 자르기(LLM 비용/실패 방지)
+        def _clip(s: str, n: int = 6000) -> str:
+            if len(s) <= n:
+                return s
+            return s[:n]
+
+        selection = _clip(selection, 5000)
+        retention = _clip(retention, 4000)
+        benefit = _clip(benefit, 2000)
+        notes = _clip(notes, 1500)
+
+        prompt = f"""
+너는 대학교 장학금 안내 페이지를 "카드 UI"용으로 요약/정리하는 전문가다.
+
+아래 장학금 원문을 읽고, 사용자가 한눈에 이해할 수 있도록 "카드형 JSON"만 출력해라.
+⚠️ 규칙:
+- 반드시 JSON만 출력(추가 문장/설명 금지)
+- 모르면 추측하지 말고 null/빈 배열로 둬라
+- eligibility_bullets/retention_bullets/notes_bullets는 각 3~6개 이내, 짧은 문장으로
+- gpa_min은 원문에 명시된 최소평점이 있을 때만 숫자(예: 3.5)로 추출
+
+출력 스키마(JSON):
+{{
+    "one_liner": "장학금 핵심 한 줄 요약",
+    "benefit_summary": "지급/감면 요약(짧게)" | null,
+    "eligibility_bullets": ["선발/지원 대상 핵심", "..."],
+    "retention_bullets": ["유지 조건 핵심", "..."],
+    "notes_bullets": ["예외/주의/산정 기준", "..."],
+    "gpa_min": 3.5 | null,
+    "keywords": ["키워드1","키워드2","키워드3"]
+}}
+
+[장학금 메타]
+- name: {scholarship.name}
+- category: {scholarship.category}
+- source_url: {scholarship.source_url}
+
+[선발기준 원문]
+{selection}
+
+[유지조건 원문]
+{retention}
+
+[지급액/혜택 원문]
+{benefit}
+
+[기타 메모]
+{notes}
+        """.strip()
+        return prompt
+
+    @staticmethod
+    def _parse_scholarship_card(raw: str) -> Dict[str, Any]:
+        """
+        기존 _parse_fast_track_result는 policy용 키가 섞일 수 있어서,
+        scholarship card는 별도 파서로 '최소 필드 보정'까지 수행.
+        """
+        parsed = LLMService._parse_fast_track_result(raw)
+
+        # 최소 필드 보정
+        out: Dict[str, Any] = {}
+        out["one_liner"] = (parsed.get("one_liner") or "").strip() or "장학금 요약"
+        out["benefit_summary"] = (parsed.get("benefit_summary") or None)
+
+        def _as_list(v):
+            if v is None:
+                return []
+            if isinstance(v, list):
+                return [str(x).strip() for x in v if str(x).strip()]
+            return [str(v).strip()] if str(v).strip() else []
+
+        out["eligibility_bullets"] = _as_list(parsed.get("eligibility_bullets"))
+        out["retention_bullets"] = _as_list(parsed.get("retention_bullets"))
+        out["notes_bullets"] = _as_list(parsed.get("notes_bullets"))
+        out["keywords"] = _as_list(parsed.get("keywords"))[:8]
+
+        # gpa_min 정규화
+        gpa_min = parsed.get("gpa_min")
+        try:
+            out["gpa_min"] = float(gpa_min) if gpa_min is not None else None
+        except Exception:
+            out["gpa_min"] = None
+
+        return out
+
+    @staticmethod
+    def get_or_make_scholarship_card(
+        db: Session,
+        scholarship: Scholarship,
+        prompt_version: Optional[int] = None,
+        force: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        scholarship_id  prompt_version 캐시 우선.
+        없으면 LLM 호출 → DB 저장 → 반환.
+        """
+        pv = prompt_version or LLMService.SCHOLARSHIP_PROMPT_VERSION
+
+        cache = (
+            db.query(ScholarshipLLMCache)
+            .filter(
+                ScholarshipLLMCache.scholarship_id == scholarship.id,
+                ScholarshipLLMCache.prompt_version == pv,
+            )
+            .first()
+        )
+
+        if cache and not force:
+            return cache.card_json
+
+        # LLM 비활성화면: 간단 fallback(캐시 저장은 선택)
+        if not settings.google_api_key:
+            fallback = {
+                "one_liner": f"{scholarship.name} 장학금",
+                "benefit_summary": (scholarship.benefit or None),
+                "eligibility_bullets": [],
+                "retention_bullets": [],
+                "notes_bullets": [],
+                "gpa_min": None,
+                "keywords": [],
+            }
+            if not cache:
+                cache = ScholarshipLLMCache(
+                    scholarship_id=scholarship.id,
+                    prompt_version=pv,
+                    card_json=fallback,
+                )
+                db.add(cache)
+                db.commit()
+                db.refresh(cache)
+            else:
+                cache.card_json = fallback
+                db.add(cache)
+                db.commit()
+            return fallback
+
+        prompt = LLMService._build_scholarship_card_prompt(scholarship)
+
+        try:
+            logger.info("[LLMService] Scholarship card 호출 (scholarship_id=%s)", scholarship.id)
+            model = genai.GenerativeModel("gemini-2.5-flash-lite")
+            response = model.generate_content(prompt)
+            raw_text = (response.text or "").strip()
+            card = LLMService._parse_scholarship_card(raw_text)
+        except Exception as e:
+            logger.error(
+                "[LLMService] Scholarship card 실패 (%s: %s)",
+                e.__class__.__name__,
+                str(e),
+            )
+            card = {
+                "one_liner": f"{scholarship.name} 장학금",
+                "benefit_summary": (scholarship.benefit or None),
+                "eligibility_bullets": [],
+                "retention_bullets": [],
+                "notes_bullets": [f"LLM 호출 실패: {e.__class__.__name__}"],
+                "gpa_min": None,
+                "keywords": [],
+            }
+
+        # upsert cache
+        if not cache:
+            cache = ScholarshipLLMCache(
+                scholarship_id=scholarship.id,
+                prompt_version=pv,
+                card_json=card,
+            )
+        else:
+            cache.card_json = card
+
+        db.add(cache)
+        db.commit()
+        db.refresh(cache)
+        return card
