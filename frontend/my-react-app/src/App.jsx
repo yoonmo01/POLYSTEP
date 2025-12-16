@@ -4,8 +4,7 @@ import { useEffect, useState } from "react";
 
 import "./App.css";
 import HomePage from "./pages/Homepage";
-import LoginPage from "./pages/LoginPage";
-import SignupPage from "./pages/SignupPage";
+import ProfilePage from "./pages/ProfilePage";
 import QuestionPage from "./pages/QuestionPage";
 import ResultPage from "./pages/ResultPage";
 import FinalPage from "./pages/FinalPage";
