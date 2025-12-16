@@ -55,9 +55,16 @@ class PolicyService:
         """
         q = db.query(Policy)
 
-        # --- 지역: 부분 매칭 ---
+        # --- 지역: 느슨한 매칭 + 전국 허용 ---
         if req.region:
-            q = q.filter(Policy.region.ilike(f"%{req.region}%"))
+            r = req.region.strip()
+            q = q.filter(
+                or_(
+                    Policy.region.ilike(f"%{r}%"),
+                    Policy.region.ilike(f"%{r.replace('도', '')}%"),
+                    Policy.region.ilike("%전국%"),
+                )
+            )
 
         # --- 카테고리: category/category_l/category_m 모두 느슨 매칭 + 정규화 매칭 ---
         if req.category:
@@ -70,9 +77,12 @@ class PolicyService:
                     Policy.category.ilike(f"%{cat_raw}%"),
                     Policy.category_l.ilike(f"%{cat_raw}%"),
                     Policy.category_m.ilike(f"%{cat_raw}%"),
-                    func.replace(func.replace(func.replace(Policy.category, " ", ""), "·", ""), "/", "").ilike(f"%{cat_norm}%"),
-                    func.replace(func.replace(func.replace(Policy.category_l, " ", ""), "·", ""), "/", "").ilike(f"%{cat_norm}%"),
-                    func.replace(func.replace(func.replace(Policy.category_m, " ", ""), "·", ""), "/", "").ilike(f"%{cat_norm}%"),
+                    func.replace(func.replace(func.replace(Policy.category, " ", ""), "·", ""), "/", "")
+                        .ilike(f"%{cat_norm}%"),
+                    func.replace(func.replace(func.replace(Policy.category_l, " ", ""), "·", ""), "/", "")
+                        .ilike(f"%{cat_norm}%"),
+                    func.replace(func.replace(func.replace(Policy.category_m, " ", ""), "·", ""), "/", "")
+                        .ilike(f"%{cat_norm}%"),
                 )
             )
 
@@ -105,8 +115,22 @@ class PolicyService:
                 title_no_space = func.replace(Policy.title, " ", "")
                 q = q.filter(title_no_space.ilike(f"%{normalized_query}%"))
 
-        # 후보는 조금 넓게
-        return q.limit(50).all()
+        candidates = q.limit(50).all()
+
+        # 🔥 fallback: 너무 빡센 조건으로 아무 것도 안 나오면
+        if not candidates:
+            q2 = db.query(Policy)
+
+            # 나이 조건만 유지 (가장 안전)
+            if req.age is not None:
+                q2 = q2.filter(
+                    (Policy.age_min.is_(None) | (Policy.age_min <= req.age)),
+                    (Policy.age_max.is_(None) | (Policy.age_max >= req.age)),
+                )
+
+            candidates = q2.limit(50).all()
+
+        return candidates
 
     @staticmethod
     def search_policies(

@@ -11,6 +11,7 @@ from sqlalchemy import (
     Boolean,
     ForeignKey,
     JSON,
+    Float
 )
 from sqlalchemy.orm import relationship
 
@@ -30,6 +31,14 @@ class User(Base):
     email = Column(String(255), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
     full_name = Column(String(255), nullable=True)
+    age = Column(Integer, nullable=True)
+    region = Column(String(64), nullable=True)
+    is_student = Column(Boolean, nullable=True)        # 학생 여부
+    academic_status = Column(String(32), nullable=True)
+    # 예: 재학 / 휴학 / 졸업예정 / 졸업
+    major = Column(String(128), nullable=True)         # 전공
+    grade = Column(Integer, nullable=True)             # 학년 (1~4)
+    gpa = Column(Float, nullable=True)                 # 평균평점 (선택)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -165,3 +174,53 @@ class ScholarshipCommonRule(Base):
     source_url = Column(String(1024), nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
+    
+
+class RecommendationSession(Base):
+    __tablename__ = "recommendation_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+
+    # QuestionPage 조건 그대로 저장 (income/policyField/jobStatus/specialField)
+    conditions = Column(JSON, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    user = relationship("User")
+    items = relationship(
+        "RecommendationItem",
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
+
+
+class RecommendationItem(Base):
+    __tablename__ = "recommendation_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("recommendation_sessions.id"), nullable=False, index=True)
+    policy_id = Column(Integer, ForeignKey("policies.id"), nullable=False, index=True)
+    badge_status = Column(String(16), nullable=True)
+    score = Column(Float, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    session = relationship("RecommendationSession", back_populates="items")
+    policy = relationship("Policy")
+
+
+class PolicyView(Base):
+    __tablename__ = "policy_views"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    policy_id = Column(Integer, ForeignKey("policies.id"), nullable=False, index=True)
+
+    # WS done에서 verification_id를 받으면 같이 저장 가능 (지금은 optional)
+    verification_id = Column(Integer, ForeignKey("policy_verifications.id"), nullable=True)
+
+    viewed_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    user = relationship("User")
+    policy = relationship("Policy")
+    verification = relationship("PolicyVerification")

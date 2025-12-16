@@ -1,68 +1,80 @@
 //frontend/my-react-app/src/pages/MyPage.jsx
 import "./MyPage.css";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { apiFetch } from "../api";
+
+const fmtMaybe = (v) => (v == null || v === "" ? "-" : String(v));
 
 function MyPage() {
   const navigate = useNavigate();
 
-  // TODO: 나중에 실제 프로필/추천 데이터 연동
-  const profile = {
-    name: "청년 사용자",
-    email: "user@example.com",
-    age: 24,
-    region: "강원도 춘천시",
-  };
+  const [profile, setProfile] = useState(null);
+  const [recentRecommendations, setRecentRecommendations] = useState([]);
+  const [viewedHistory, setViewedHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const recentRecommendations = [
-    {
-      id: 1,
-      title: "청년 주거 지원 바우처",
-      category: "생활·주거",
-      status: "관심 정책",
-      updatedAt: "2025-12-10",
-    },
-    {
-      id: 2,
-      title: "청년 취업 성공 패키지",
-      category: "일자리·취업",
-      status: "추천 완료",
-      updatedAt: "2025-12-09",
-    },
-    {
-      id: 3,
-      title: "대학생 등록금 지원 장학금",
-      category: "교육·훈련",
-      status: "조회 완료",
-      updatedAt: "2025-12-08",
-    },
-  ];
+  const displayName = useMemo(
+    () => profile?.name || profile?.full_name || "사용자",
+    [profile]
+  );
 
-  const viewedHistory = [
-    {
-      id: 1,
-      title: "청년 전세자금 대출",
-      category: "생활·주거",
-    },
-    {
-      id: 2,
-      title: "청년 지역 정착 지원금",
-      category: "지역 정착",
-    },
-    {
-      id: 3,
-      title: "청년 창업 지원 패키지",
-      category: "창업·소상공인",
-    },
-  ];
+  useEffect(() => {
+    const run = async () => {
+      try {
+        setLoading(true);
+        setError("");
+
+        const [me, rec, views] = await Promise.all([
+          apiFetch("/me"),
+          apiFetch("/me/recommendations?limit=1"),
+          apiFetch("/me/views?limit=10"),
+        ]);
+
+        setProfile(me);
+        setRecentRecommendations(Array.isArray(rec?.items) ? rec.items : []);
+        setViewedHistory(Array.isArray(views?.items) ? views.items : []);
+      } catch (e) {
+        setError(e?.message || "마이페이지 데이터를 불러오지 못했어요.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    run();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="mypage">
+        <div className="mypage-shell">
+          <div className="mypage-card">로딩 중...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="mypage">
+        <div className="mypage-shell">
+          <div className="mypage-card">
+            <p style={{ color: "#fca5a5", fontWeight: 800 }}>{error}</p>
+            <button className="mypage-primary-btn" onClick={() => navigate("/login")}>
+              로그인으로
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mypage">
       <div className="mypage-shell">
         {/* 상단 인사 영역 */}
         <header className="mypage-header">
-          <h1 className="mypage-title">
-            {profile.name}님을 위한 정책 공간
-          </h1>
+          <h1 className="mypage-title">{displayName}님을 위한 정책 공간</h1>
           <p className="mypage-subtitle">
             최근에 본 정책과 추천 결과를 한눈에 모아두었어요.
             <br className="only-mobile" />
@@ -70,47 +82,35 @@ function MyPage() {
           </p>
         </header>
 
-        {/* 상단 2열 카드: 프로필 + 최근 추천 */}
+        {/* 상단 2열 카드: 프로필(컴팩트) + 최근 추천 */}
         <section className="mypage-top-grid">
-          {/* 프로필 요약 카드 */}
-          <div className="mypage-card profile-card">
+          {/* ✅ 프로필: 큰 박스 → 컴팩트 요약 카드 */}
+          <div className="mypage-card profile-card-compact">
             <div className="mypage-card-head">
               <h2>내 프로필</h2>
-              <button
-                type="button"
-                className="profile-edit-btn"
-                onClick={() => navigate("/profile")}
-              >
-                프로필 수정하기
-              </button>
             </div>
 
-            <div className="profile-info-grid">
-              <div className="profile-info-item">
-                <span className="label">이름</span>
-                <span className="value">{profile.name}</span>
+            <div className="profile-compact">
+              <div className="profile-avatar" aria-hidden>
+                {String(displayName).slice(0, 1)}
               </div>
-              <div className="profile-info-item">
-                <span className="label">이메일</span>
-                <span className="value">{profile.email}</span>
-              </div>
-              <div className="profile-info-item">
-                <span className="label">나이</span>
-                <span className="value">
-                  {profile.age ? `${profile.age}세` : "-"}
-                </span>
-              </div>
-              <div className="profile-info-item">
-                <span className="label">거주 지역</span>
-                <span className="value">
-                  {profile.region || "설정되지 않음"}
-                </span>
+
+              <div className="profile-compact-main">
+                <div className="profile-name-row">
+                  <div className="profile-name">{displayName}</div>
+                  <div className="profile-email">{fmtMaybe(profile?.email)}</div>
+                </div>
+
+                <div className="profile-chips">
+                  <span className="profile-chip">
+                    나이: {profile?.age ? `${profile.age}세` : "-"}
+                  </span>
+                  <span className="profile-chip">
+                    거주: {profile?.region ? profile.region : "미설정"}
+                  </span>
+                </div>
               </div>
             </div>
-
-            <p className="profile-hint">
-              프로필을 업데이트하면 추천 정책의 정확도도 함께 높아져요.
-            </p>
           </div>
 
           {/* 최근 추천 카드 */}
@@ -122,23 +122,45 @@ function MyPage() {
                 className="small-link-btn"
                 onClick={() => navigate("/result")}
               >
-                결과 다시 보러가기 →
+                결과 보기 →
               </button>
             </div>
 
             {recentRecommendations.length > 0 ? (
               <ul className="recent-list">
                 {recentRecommendations.map((item) => (
-                  <li key={item.id} className="recent-item">
+                  <li
+                    key={item.id ?? `${item.policy_id}-${item.title}`}
+                    className="recent-item"
+                  >
                     <div className="recent-main">
+                      {/* 제목 */}
                       <p className="recent-title">{item.title}</p>
+
+                      {/* 메타 정보: 지역 + 분야 */}
                       <p className="recent-meta">
-                        <span>{item.category}</span>
+                        <span className="recent-region">
+                          📍 {item.region || "-"}
+                        </span>
                         <span>·</span>
-                        <span>{item.updatedAt}</span>
+                        <span className="recent-category">
+                          {item.category_l || "-"}
+                          {item.category_m ? ` / ${item.category_m}` : ""}
+                        </span>
                       </p>
                     </div>
-                    <span className="recent-status">{item.status}</span>
+
+                    {/* 상태 뱃지 */}
+                    <span
+                      className={
+                        "recent-status" +
+                        (item.badge_status
+                          ? ` status-${String(item.badge_status).toLowerCase()}`
+                          : " status-recommend")
+                      }
+                    >
+                      {item.badge_status || "추천"}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -157,17 +179,28 @@ function MyPage() {
           <div className="mypage-card history-card">
             <div className="mypage-card-head">
               <h2>최근에 살펴본 정책</h2>
+              <span className="subtle-count">{viewedHistory.length}개</span>
             </div>
 
             {viewedHistory.length > 0 ? (
-              <ul className="history-list">
+              <ul className="history-list history-list-rows">
                 {viewedHistory.map((item) => (
-                  <li key={item.id} className="history-item">
-                    <div className="dot" />
-                    <div className="history-texts">
-                      <p className="history-title">{item.title}</p>
-                      <p className="history-meta">{item.category}</p>
+                  <li key={item.id ?? `${item.policy_id}-${item.title}`} className="history-row">
+                    <div className="history-row-left">
+                      <div className="dot" />
+                      <div className="history-texts">
+                        <p className="history-title">{item.title}</p>
+                        <p className="history-meta">{item.category || "-"}</p>
+                      </div>
                     </div>
+                    <button
+                      type="button"
+                      className="row-link-btn"
+                      onClick={() => navigate(`/final/${item.policy_id || item.id}`)}
+                      title="최종 추천 페이지로 이동"
+                    >
+                      보기 →
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -183,8 +216,7 @@ function MyPage() {
           <div className="mypage-cta-card">
             <h2>다시 정책 추천 받으러 가볼까요?</h2>
             <p>
-              지금 상황이 달라졌다면, 연소득이나 취업 상태, 관심 분야를
-              업데이트하고
+              지금 상황이 달라졌다면, 연소득이나 취업 상태, 관심 분야를 업데이트하고
               <br className="only-mobile" />
               새로운 추천을 받아보는 것도 좋아요.
             </p>

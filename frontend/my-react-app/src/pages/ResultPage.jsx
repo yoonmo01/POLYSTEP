@@ -1,6 +1,7 @@
 //frontend/my-react-app/src/pages/ResultPage.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { apiFetch } from "../api";
 import "./ResultPage.css";
 
 // base64 헤더로 대충 MIME 추정 (png/jpg/webp 정도만)
@@ -73,10 +74,14 @@ function ResultPage() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const user = location.state?.user || null;
+  const [me, setMe] = useState(null);
   const conditions = location.state?.conditions || null;
   const incomingResults = Array.isArray(location.state?.results)
     ? location.state.results
+    : [];
+
+  const incomingScholarships = Array.isArray(location.state?.scholarships)
+    ? location.state.scholarships
     : [];
 
   const results = useMemo(() => incomingResults.slice(0, 6), [incomingResults]);
@@ -92,10 +97,80 @@ function ResultPage() {
   const [finalUrl, setFinalUrl] = useState("");
 
   const wsRef = useRef(null);
+  const savedRecoRef = useRef(false);
+
+  const logBoxRef = useRef(null);
+  const [autoScroll, setAutoScroll] = useState(true);
+  // =========================
+  // ✅ 화면 표시용 사용자 정보 (/me)
+  //  - id, email, name, created_at 제외
+  // =========================
+  const visibleMeEntries = useMemo(() => {
+    if (!me) return [];
+
+    const EXCLUDE_KEYS = new Set([
+      "id",
+      "email",
+      "name",
+      "created_at",
+    ]);
+
+    return Object.entries(me).filter(
+      ([key, value]) =>
+        !EXCLUDE_KEYS.has(key) &&
+        value !== null &&
+        value !== undefined &&
+        value !== ""
+    );
+  }, [me]);
+
+  const USER_LABEL_MAP = {
+    age: "나이",
+    region: "거주지",
+    is_student: "학생 여부",
+    academic_status: "학적 상태",
+    major: "전공",
+    grade: "학년",
+    gpa: "평점",
+  };
+
+  useEffect(() => {
+    apiFetch("/me")
+      .then((data) => setMe(data))
+      .catch((e) => {
+        console.warn("/me fetch failed:", e?.message);
+      });
+  }, []);
 
   useEffect(() => {
     setSelected(results[0] || null);
   }, [results]);
+
+  // ✅ (MyPage용) "최근 추천받은 정책" 저장: ResultPage 진입 시 1회
+  useEffect(() => {
+    if (savedRecoRef.current) return;
+    if (!conditions) return;
+    if (!Array.isArray(results) || results.length === 0) return;
+
+    savedRecoRef.current = true;
+
+    apiFetch("/me/recommendations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        conditions,
+        results: results.slice(0, 5).map((r) => ({
+          policy_id: r.policy_id,
+          score: r.score ?? null,
+        })),
+      }),
+    }).catch((e) => {
+      // 실패해도 UX는 계속 진행
+      console.warn("recommendation save failed:", e?.message);
+      // 다음 렌더에서 재시도 가능하게 롤백하고 싶으면 아래 주석 해제
+      // savedRecoRef.current = false;
+    });
+  }, [conditions, results]);
 
   // 기본 iframe: 정책 자체 URL(있으면)
   const iframeSrc = useMemo(() => {
@@ -107,6 +182,24 @@ function ResultPage() {
   const pushLog = (msg) => {
     const ts = new Date().toLocaleTimeString("ko-KR", { hour12: false });
     setVerifyLogs((prev) => [...prev, `[${ts}] ${msg}`]);
+  };
+
+  // ✅ 새 로그가 들어오면 자동으로 맨 아래로 스크롤
+  useEffect(() => {
+    if (!autoScroll) return;
+    const el = logBoxRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [verifyLogs, autoScroll]);
+
+  // ✅ 사용자가 위로 스크롤해서 옛 로그 보는 중이면 autoScroll 끄기
+  const handleLogScroll = () => {
+    const el = logBoxRef.current;
+    if (!el) return;
+    const threshold = 24; // px: 바닥 근처로 판단하는 여유값
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+    // 바닥이면 다시 autoScroll 켜고, 아니면 끄기
+    setAutoScroll(atBottom);
   };
 
   const closeWS = () => {
@@ -170,6 +263,15 @@ function ResultPage() {
         if (data.type === "done") {
           if (data.status === "SUCCESS") {
             pushLog("검증 완료 ✅");
+            // ✅ (MyPage용) "최근 살펴본 정책" 저장: 성공(done) 시점에 기록 + verification_id 포함
+            apiFetch("/me/views", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                policy_id: selected?.policy_id,
+                verification_id: data.verification_id ?? null,
+              }),
+            }).catch((e) => console.warn("view save failed:", e?.message));
             if (data.final_url) {
               pushLog("최종 페이지 URL 확인됨 → iframe으로 전환");
               setFinalUrl(data.final_url);
@@ -237,7 +339,7 @@ function ResultPage() {
           </div>
         </header>
 
-        {(user || conditions) && (
+        {(me || conditions) && (
           <section
             className="result-list-panel"
             style={{ marginBottom: "1.2rem", padding: "1.2rem" }}
@@ -251,29 +353,157 @@ function ResultPage() {
               </p>
             </div>
 
-            <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", marginTop: "0.6rem" }}>
-              {user?.age && <span className="result-tag">나이: {user.age}세</span>}
-              {user?.region && <span className="result-tag">거주지: {user.region}</span>}
-              {conditions?.income && <span className="result-tag">연소득: {conditions.income}만 원</span>}
-              {conditions?.policyField && <span className="result-tag">분야: {conditions.policyField}</span>}
-              {conditions?.jobStatus && <span className="result-tag">상태: {conditions.jobStatus}</span>}
-              {conditions?.specialField && <span className="result-tag">특화: {conditions.specialField}</span>}
+            <div
+              style={{
+                display: "flex",
+                gap: "0.6rem",
+                flexWrap: "wrap",
+                marginTop: "0.6rem",
+              }}
+            >
+              {/* ✅ /me 기반 사용자 정보 */}
+              {visibleMeEntries.map(([key, value]) => {
+                const label = USER_LABEL_MAP[key] || key;
+
+                let displayValue = value;
+                if (key === "age") displayValue = `${value}세`;
+                if (key === "is_student")
+                  displayValue = value ? "재학 중" : "비재학";
+                if (key === "gpa")
+                  displayValue = `${value} / 4.5`;
+
+                return (
+                  <span key={`me-${key}`} className="result-tag">
+                    {label}: {displayValue}
+                  </span>
+                );
+              })}
+
+              {/* ✅ QuestionPage에서 선택한 조건 */}
+              {conditions?.income && (
+                <span className="result-tag">연소득: {conditions.income}만 원</span>
+              )}
+              {conditions?.policyField && (
+                <span className="result-tag">분야: {conditions.policyField}</span>
+              )}
+              {conditions?.jobStatus && (
+                <span className="result-tag">상태: {conditions.jobStatus}</span>
+              )}
+              {conditions?.specialField && (
+                <span className="result-tag">특화: {conditions.specialField}</span>
+              )}
             </div>
           </section>
         )}
 
-        <div className="result-layout">
-          <section className="result-list-panel">
+        <div className="result-layout-3col">
+          {/* ✅ LEFT: 장학금 */}
+          <section className="result-list-panel scholarship-panel scroll-panel">
             <div className="list-head">
-              <p className="list-count">
-                총 <strong>{results.length}</strong>개의 추천 정책
-              </p>
-              <p className="list-hint">
-                카드를 클릭하면 오른쪽에서 정책 페이지/실시간 검증 화면을 볼 수 있어요.
+              <p className="list-count">🎓 추천 장학금</p>
+              <p className="list-hint" style={{ marginTop: 0 }}>
+                학적/전공/성적/키워드 기반 장학금 추천이에요.
               </p>
             </div>
 
-            <div className="result-list">
+            <div className="result-list scroll-body">
+              {incomingScholarships.length === 0 ? (
+                <div className="detail-empty">
+                  조건에 맞는 장학금 추천이 없어요.
+                </div>
+              ) : (
+                incomingScholarships.map((s) => (
+                  <div key={s.id} className="result-card scholarship-card">
+                    <div className="result-card-main">
+                      <div className="result-card-headrow">
+                        <h2 className="result-card-title" style={{ margin: 0 }}>
+                          {s.name}
+                        </h2>
+                        {s.category && (
+                          <span className="result-score-pill">{s.category}</span>
+                        )}
+                      </div>
+                      <p className="result-card-meta">
+                        <span>장학금</span>
+                        <span>·</span>
+                        <span>{s.source_url ? "출처 있음" : "출처 없음"}</span>
+                      </p>
+                      <p
+                        className="result-card-desc"
+                        style={{
+                          display: "-webkit-box",
+                          WebkitLineClamp: 3,
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
+                        }}
+                      >
+                        {s.selection_criteria || "선발 기준 정보 없음"}
+                      </p>
+                    </div>
+
+                    <div className="result-card-bottom">
+                      <div className="result-tags">
+                        {s.benefit && (
+                          <span className="result-tag">지급: {s.benefit}</span>
+                        )}
+                        {s.gpa_min != null && (
+                          <span className="result-tag">평점 ≥ {s.gpa_min}</span>
+                        )}
+                      </div>
+                      {s.source_url ? (
+                        <a
+                          href={s.source_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="row-link-btn"
+                          style={{ textDecoration: "none" }}
+                        >
+                          보기 →
+                        </a>
+                      ) : (
+                        <span className="row-link-btn" style={{ opacity: 0.6 }}>
+                          보기 →
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+
+          {/* ✅ MIDDLE: 청년정책(기존 왼쪽) */}
+          <section className="result-list-panel policy-panel scroll-panel">
+            <div
+              className="list-head"
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-end",
+                gap: "1rem",
+              }}
+            >
+              <div>
+                <p className="list-count">
+                  총 <strong>{results.length}</strong>개의 추천 정책
+                </p>
+                <p className="list-hint" style={{ marginTop: 0 }}>
+                  카드를 클릭하면 오른쪽에서 정책 페이지/실시간 검증 화면을 볼 수 있어요.
+                </p>
+              </div>
+
+              {/* ✅ 검증하기 버튼만 상단으로 이동 */}
+              <button
+                type="button"
+                className="result-next-btn"
+                onClick={handleVerify}
+                disabled={isVerifying || !selected}
+              >
+                {isVerifying ? "검증 중..." : "검증하기"}
+              </button>
+            </div>
+
+            <div className="result-list scroll-body">
               {results.length === 0 ? (
                 <div className="detail-empty">
                   추천 결과가 없어요. 조건을 바꿔 다시 시도해 주세요.
@@ -297,11 +527,30 @@ function ResultPage() {
                     }}
                   >
                     <div className="result-card-main">
-                      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.7rem" }}>
+                      <div className="result-card-headrow">
                         <h2 className="result-card-title" style={{ margin: 0 }}>
                           {item.title}
                         </h2>
-                        <span style={badgeStyle(item.badge_status)}>{badgeLabel(item.badge_status)}</span>
+                        <div className="result-card-badges">
+                          {/* 기존 PASS / WARNING / FAIL */}
+                          <span style={badgeStyle(item.badge_status)}>
+                            {badgeLabel(item.badge_status)}
+                          </span>
+
+                          {/* ✅ 검증 상태 뱃지 */}
+                          {item.has_verification_cache ? (
+                            <span
+                              className="verify-badge verify-done"
+                              title={item.last_verified_at ? `마지막 검증: ${item.last_verified_at}` : "검증됨"}
+                            >
+                              ✔ 검증됨
+                            </span>
+                          ) : (
+                            <span className="verify-badge verify-pending">
+                              ⏳ 미검증
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       <p className="result-card-meta">
@@ -332,7 +581,7 @@ function ResultPage() {
                         <span className="result-tag">마감: {fmtDate(item.biz_end)}</span>
                       </div>
 
-                      <span className="result-score-pill">{idx === 0 ? "기준 정책" : "유사 정책"}</span>
+                      <span className="result-score-pill">추천 정책</span>
                     </div>
                   </button>
                 ))
@@ -340,8 +589,8 @@ function ResultPage() {
             </div>
           </section>
 
-          {/* ✅ 오른쪽: 검증 중이면 실시간 화면(img), 아니면 iframe */}
-          <section className="result-detail-panel">
+          {/* ✅ RIGHT: iframe/실시간 */}
+          <section className="result-detail-panel detail-panel">
             <div className="detail-card" style={{ height: "100%" }}>
               <div className="detail-iframe-block" style={{ width: "100%", height: "100%", minHeight: 520 }}>
                 {isVerifying ? (
@@ -410,60 +659,54 @@ function ResultPage() {
           </section>
         </div>
 
-        {/* ✅ 검증 로그 */}
-        <section className="result-list-panel" style={{ marginTop: "1.4rem", padding: "1.4rem" }}>
-          <div className="list-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: "1rem" }}>
-            <div>
-              <p className="list-count" style={{ marginBottom: 4 }}>검증 로그</p>
-              <p className="list-hint" style={{ marginTop: 0 }}>
-                “검증하기”를 누르면 백엔드 브라우저 자동 탐색 과정을 실시간으로 보여줍니다.
-              </p>
+        {/* ✅ BOTTOM: 로그(3컬럼 전체 폭) */}
+        <section className="result-list-panel log-panel">
+            <div className="list-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: "1rem" }}>
+              <div>
+                <p className="list-count" style={{ marginBottom: 4 }}>검증 로그</p>
+                <p className="list-hint" style={{ marginTop: 0 }}>
+                  백엔드 브라우저 자동 탐색 과정을 실시간으로 보여줍니다.
+                </p>
+              </div>
+
+              <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className="result-back-btn"
+                  onClick={() => setVerifyLogs([])}
+                  disabled={verifyLogs.length === 0 || isVerifying}
+                >
+                  로그 지우기
+                </button>
+              </div>
             </div>
 
-            <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
-              <button
-                type="button"
-                className="result-next-btn"
-                onClick={handleVerify}
-                disabled={isVerifying || !selected}
-              >
-                {isVerifying ? "검증 중..." : "검증하기"}
-              </button>
-              <button
-                type="button"
-                className="result-back-btn"
-                onClick={() => setVerifyLogs([])}
-                disabled={verifyLogs.length === 0 || isVerifying}
-              >
-                로그 지우기
-              </button>
+            <div
+              ref={logBoxRef}
+              onScroll={handleLogScroll}
+              style={{
+                marginTop: "0.9rem",
+                borderRadius: 14,
+                border: "1px solid rgba(148, 163, 184, 0.35)",
+                background: "rgba(15, 23, 42, 0.9)",
+                padding: "0.9rem 1rem",
+                minHeight: 160,
+                maxHeight: 260,
+                overflow: "auto",
+              }}
+            >
+              {verifyLogs.length === 0 ? (
+                <p style={{ margin: 0, color: "#9ca3af", fontSize: "0.85rem" }}>
+                  아직 로그가 없어요. “검증하기”를 눌러보세요.
+                </p>
+              ) : (
+                <ul style={{ margin: 0, paddingLeft: "1.1rem", color: "#e5e7eb", fontSize: "0.85rem", lineHeight: 1.55 }}>
+                  {verifyLogs.map((line, idx) => (
+                    <li key={`${line}-${idx}`}>{line}</li>
+                  ))}
+                </ul>
+              )}
             </div>
-          </div>
-
-          <div
-            style={{
-              marginTop: "0.9rem",
-              borderRadius: 14,
-              border: "1px solid rgba(148, 163, 184, 0.35)",
-              background: "rgba(15, 23, 42, 0.9)",
-              padding: "0.9rem 1rem",
-              minHeight: 160,
-              maxHeight: 260,
-              overflow: "auto",
-            }}
-          >
-            {verifyLogs.length === 0 ? (
-              <p style={{ margin: 0, color: "#9ca3af", fontSize: "0.85rem" }}>
-                아직 로그가 없어요. “검증하기”를 눌러보세요.
-              </p>
-            ) : (
-              <ul style={{ margin: 0, paddingLeft: "1.1rem", color: "#e5e7eb", fontSize: "0.85rem", lineHeight: 1.55 }}>
-                {verifyLogs.map((line, idx) => (
-                  <li key={`${line}-${idx}`}>{line}</li>
-                ))}
-              </ul>
-            )}
-          </div>
         </section>
       </div>
     </div>

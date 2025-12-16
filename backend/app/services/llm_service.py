@@ -142,19 +142,34 @@ class LLMService:
             text = text[:6000]
 
         prompt = (
-            "다음은 청년 지원 정책의 원문 일부이다.\n"
-            "주어진 사용자의 나이/지역을 기준으로 이 정책의 신청 가능성을 평가해라.\n\n"
+            "다음은 대한민국 청년 지원 정책의 원문 일부이다.\n"
+            "주어진 사용자의 나이와 지역 정보를 기준으로 이 정책의 신청 가능성을 평가하라.\n\n"
+            "⚠️ 판단 원칙(매우 중요):\n"
+            "1. 정책 원문 또는 메타 정보에 **명시적으로 대상이 아님**이 드러나지 않는 한 FAIL로 판단하지 말 것.\n"
+            "2. 정보가 부족하거나 조건이 애매한 경우에는 반드시 WARNING으로 판단할 것.\n"
+            "3. 정책 원문에 자격 요건이 없을 경우, 아래 제공된 정책 메타 정보(age/region)를 근거로 가능성을 추정할 것.\n"
+            "4. FAIL은 다음과 같은 경우에만 사용한다:\n"
+            "   - 연령 초과/미달이 명확함\n"
+            "   - 거주 지역이 명확히 불일치함\n"
+            "   - 정책 원문에 '지원 대상이 아님', '신청 불가'가 명시됨\n\n"
             "응답 형식은 반드시 JSON 한 줄로만 출력한다.\n"
             '{\n'
             '  "badge_status": "PASS" | "WARNING" | "FAIL",\n'
-            '  "short_summary": "한 문장 요약",\n'
-            '  "reason": "판단 근거",\n'
-            '  "missing_criteria": ["부족한 조건1", ...]\n'
+            '  "short_summary": "사용자 관점의 한 문장 요약",\n'
+            '  "reason": "판단 근거를 간단히 설명",\n'
+            '  "missing_criteria": ["부족한 조건이 있다면 나열"]\n'
             "}\n\n"
-            f"사용자 나이: {age_part}\n"
-            f"사용자 지역: {region_part}\n\n"
-            f"정책 제목: {policy.title}\n"
-            f"정책 원문(일부):\n{text}\n"
+            f"[사용자 정보]\n"
+            f"- 나이: {age_part}\n"
+            f"- 지역: {region_part}\n\n"
+            f"[정책 메타 정보]\n"
+            f"- 정책 지역(meta): {policy.region}\n"
+            f"- 연령 범위(meta): {policy.age_min} ~ {policy.age_max}\n"
+            f"- 정책 분야(meta): {policy.category}\n\n"
+            f"[정책 제목]\n"
+            f"{policy.title}\n\n"
+            f"[정책 원문 일부]\n"
+            f"{text}\n"
         )
         return prompt
 

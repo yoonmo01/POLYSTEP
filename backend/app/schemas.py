@@ -23,11 +23,20 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     password: str
     full_name: Optional[str] = None
+    age: Optional[int] = None
+    region: Optional[str] = None
+    is_student: Optional[bool] = None
+    academic_status: Optional[str] = None
+    major: Optional[str] = None
+    grade: Optional[int] = None
+    gpa: Optional[float] = None
 
 
 class UserRead(UserBase):
     id: int
     full_name: Optional[str] = None
+    age: Optional[int] = None
+    region: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -208,3 +217,67 @@ class ScholarshipCommonRuleRead(BaseModel):
 class ScholarshipBundleResponse(BaseModel):
     scholarships: List[ScholarshipRead]
     common_rules: List[ScholarshipCommonRuleRead]
+    
+class MeResponse(BaseModel):
+    id: int
+    email: EmailStr
+    name: Optional[str] = None
+    age: Optional[int] = None
+    region: Optional[str] = None
+    is_student: Optional[bool] = None
+    academic_status: Optional[str] = None
+    major: Optional[str] = None
+    grade: Optional[int] = None
+    gpa: Optional[float] = None
+    created_at: datetime | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class RecommendationItemIn(BaseModel):
+    policy_id: int
+    badge_status: Optional[BadgeStatus] = None
+    score: Optional[float] = None
+
+
+class RecommendationCreateRequest(BaseModel):
+    conditions: Optional[Dict[str, Any]] = None
+    results: List[RecommendationItemIn]
+
+
+class RecommendationItemOut(BaseModel):
+    policy_id: int
+    title: str
+    category: Optional[str] = None
+    category_l: Optional[str] = None
+    category_m: Optional[str] = None
+    region: Optional[str] = None
+    badge_status: Optional[BadgeStatus] = None
+    score: Optional[float] = None
+
+
+class RecommendationSessionResponse(BaseModel):
+    created_at: datetime | None = None
+    conditions: Optional[Dict[str, Any]] = None
+    items: List[RecommendationItemOut] = []
+
+
+class ViewCreateRequest(BaseModel):
+    policy_id: int
+    verification_id: Optional[int] = None
+
+
+class ViewItemOut(BaseModel):
+    policy_id: int
+    title: str
+    category: Optional[str] = None
+    category_l: Optional[str] = None
+    category_m: Optional[str] = None
+    region: Optional[str] = None
+    viewed_at: datetime | None = None
+    verification_status: Optional[PolicyVerificationStatusEnum] = None
+
+
+class ViewListResponse(BaseModel):
+    items: List[ViewItemOut] = []

@@ -4,16 +4,22 @@ import { Link, useNavigate } from "react-router-dom";
 import heroBg from "../assets/HomePage_BackGround.jpg";
 import "./HomePage.css";
 
-import { getUser, clearUser } from "../auth";
+import { clearUser } from "../auth";
+import { apiFetch } from "../api";
 
 const HomePage = () => {
   const navigate = useNavigate();
-  const [user, setUserState] = useState(getUser());
+  const [user, setUserState] = useState(null);
 
   useEffect(() => {
-    const onStorage = () => setUserState(getUser());
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    apiFetch("/me")
+      .then((me) => {
+        setUserState({
+          ...me,
+          name: me.name ?? me.full_name ?? me.fullName ?? "사용자",
+        });
+      })
+      .catch(() => setUserState(null));
   }, []);
 
   const handleLogout = () => {
@@ -81,9 +87,9 @@ const HomePage = () => {
             <Link to="/question" className="btn btn-primary">
               나에게 맞는 정책 찾기
             </Link>
-            <Link to="/about" className="btn btn-ghost">
+            {/* <Link to="/about" className="btn btn-ghost">
               서비스 소개 보기
-            </Link>
+            </Link> */}
           </div>
 
           <div className="home-badges">

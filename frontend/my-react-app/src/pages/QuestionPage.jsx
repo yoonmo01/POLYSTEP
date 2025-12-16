@@ -3,6 +3,46 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./QuestionPage.css";
 import { getUser } from "../auth";
+import { apiFetch } from "../api";
+
+// ✅ Signup/프로필에서 저장된 user 객체에서 "표시/전달용" 필드만 뽑기
+// - 이메일/비밀번호(및 유사 필드) 제거
+// - name/full_name/fullName 정규화
+// - age 숫자 변환
+const buildUserProfileForResult = (rawUser) => {
+  if (!rawUser || typeof rawUser !== "object") return null;
+
+  const u = { ...rawUser };
+
+  const BLOCK_KEYS = new Set([
+    "password",
+    "hashed_password",
+    "hashedPassword",
+    "email",
+    "access_token",
+    "accessToken",
+    "token",
+    "token_type",
+    "tokenType",
+  ]);
+
+  const normalizedName = u.name ?? u.full_name ?? u.fullName ?? null;
+
+  const ageNum =
+    u.age === null || u.age === undefined || u.age === ""
+      ? undefined
+      : Number(u.age);
+
+  for (const k of Object.keys(u)) {
+    if (BLOCK_KEYS.has(k)) delete u[k];
+  }
+
+  return {
+    ...u,
+    ...(normalizedName ? { name: normalizedName } : {}),
+    ...(Number.isFinite(ageNum) ? { age: ageNum } : {}),
+  };
+};
 
 function QuestionPage() {
   const navigate = useNavigate();
@@ -12,6 +52,8 @@ function QuestionPage() {
   const [policyField, setPolicyField] = useState(null);
   const [jobStatus, setJobStatus] = useState(null);
   const [specialField, setSpecialField] = useState(null);
+  const [scholarshipCategory, setScholarshipCategory] = useState(null);
+  const [scholarshipKeyword, setScholarshipKeyword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState("");
 
@@ -44,6 +86,15 @@ function QuestionPage() {
     "지역 정착/귀향",
   ];
 
+  const scholarshipCategoryOptions = [
+    "성적",
+    "복지",
+    "근로",
+    "SW",
+    "국제",
+    "기타",
+  ];
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -55,20 +106,13 @@ function QuestionPage() {
 
     if (isLoading) return;
 
-    // ✅ 백엔드 PolicySearchRequest가 query/age/region/category라서 매핑
-    const user = getUser();
-    if (!user) {
+    // ✅ 로그인 확인 (토큰 기준)
+    const token = localStorage.getItem("access_token");
+    if (!token) {
       alert("로그인이 필요합니다.");
       navigate("/login");
       return;
     }
-
-    const userProfile = {
-      name: user.name,
-      email: user.email,
-      age: user.age ? Number(user.age) : undefined,
-      region: user.region,
-    };
 
     // ✅ income/jobStatus/specialField는 query에 녹여서 전달(임시 매핑)
     const searchConditions = {
@@ -76,6 +120,8 @@ function QuestionPage() {
       policyField,
       jobStatus,
       specialField,
+      scholarshipCategory,
+      scholarshipKeyword: scholarshipKeyword?.trim() || "",
     };
 
     const query = [
@@ -84,11 +130,26 @@ function QuestionPage() {
       `특화:${specialField || "없음"}`,
     ].join(" | ");;
 
+    let me = null;
+    try {
+      me = await apiFetch("/me");
+    } catch (err) {
+      console.warn("/me fetch failed:", err?.message);
+      alert("사용자 정보를 불러오지 못했습니다. 다시 로그인해 주세요.");
+      navigate("/login");
+      return;
+    }
+
+    const userProfile = buildUserProfileForResult(me);
+
     const qs = new URLSearchParams();
     if (query) qs.set("query", query);
-    if (userProfile.age !== undefined) qs.set("age", String(userProfile.age));
-    if (userProfile.region) qs.set("region", userProfile.region);
-    if (policyField) qs.set("category", policyField);
+    if (me?.age !== null && me?.age !== undefined)
+      qs.set("age", String(me.age));
+    if (me?.region)
+      qs.set("region", me.region);
+    if (policyField)
+      qs.set("category", policyField);
 
     setIsLoading(true);
     setLoadingMsg("정책을 찾는 중이에요...");
@@ -99,23 +160,46 @@ function QuestionPage() {
     const t3 = setTimeout(() => setLoadingMsg("거의 다 됐어요. 결과를 불러오는 중!"), 2300);
 
     try {
-      const token = localStorage.getItem("access_token");
-      const res = await fetch(`${API_BASE_URL}/policies/search_with_similar?${qs.toString()}`, {
-        method: "GET",
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      });
+      const headers = {
+        Authorization: `Bearer ${token}`,
+      };
 
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        const msg = data?.detail || "정책 검색에 실패했습니다.";
+      // ✅ 장학금 검색 파라미터 구성
+      const sQs = new URLSearchParams();
+      if (scholarshipCategory) sQs.set("category", scholarshipCategory);
+
+      // 키워드가 없으면 전공/학적 기반으로 기본 키워드를 만들어도 됨(선택)
+      const kw = (scholarshipKeyword || "").trim();
+      if (kw) sQs.set("query", kw);
+      sQs.set("limit", "5");
+      sQs.set("offset", "0");
+
+      setLoadingMsg("정책 + 장학금을 함께 찾는 중이에요...");
+
+      const [policyRes, scholarshipRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/policies/search_with_similar?${qs.toString()}`, {
+          method: "GET",
+          headers,
+        }),
+        fetch(`${API_BASE_URL}/scholarships?${sQs.toString()}`, {
+          method: "GET",
+          headers,
+        }),
+      ]);
+
+      const policyData = await policyRes.json().catch(() => null);
+      if (!policyRes.ok) {
+        const msg = policyData?.detail || "정책 검색에 실패했습니다.";
         throw new Error(msg);
       }
 
+      // 장학금은 실패해도 정책 UX 유지(조용히 빈 배열 처리)
+      const scholarshipData = await scholarshipRes.json().catch(() => []);
+      const scholarships = Array.isArray(scholarshipData) ? scholarshipData : [];
+
       // ✅ 응답에서 기준 1개 + 유사 정책들 합치고, "최대 5개만" 보여주기
-      const base = data?.base_policy ? [data.base_policy] : [];
-      const similars = Array.isArray(data?.similar_policies) ? data.similar_policies : [];
+      const base = policyData?.base_policy ? [policyData.base_policy] : [];
+      const similars = Array.isArray(policyData?.similar_policies) ? policyData.similar_policies : [];
       const merged = [...base, ...similars];
       const top5 = merged.slice(0, 5);
 
@@ -124,11 +208,31 @@ function QuestionPage() {
         return;
       }
 
+      // ✅ (MyPage용) "최근 추천" 저장
+     // 서버가 title 등을 조인해서 내려줄 수 있으니 policy_id만 저장해도 충분
+      try {
+        await apiFetch("/me/recommendations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            conditions: searchConditions,
+            results: top5.map((p) => ({
+              policy_id: p.policy_id,
+              score: p.score ?? null,
+            })),
+          }),
+        });
+      } catch (e) {
+        // 저장 실패해도 사용자 UX는 유지(결과는 보여줘야 하니까)
+        console.warn("recommendations save failed:", e?.message);
+      }
+
       navigate("/result", {
         state: {
           user: userProfile,
           conditions: searchConditions,
           results: top5,
+          scholarships,
         },
       });
     } catch (err) {
@@ -313,6 +417,44 @@ function QuestionPage() {
               </div>
             </div>
           </section>
+          {/* ✅ 섹션 5: 장학금 조건 */}
+          <section className="question-section">
+            <div className="section-head">
+              <h2>5. 장학금 조건</h2>
+              <p>원하는 장학금 유형을 고르고, 키워드로 더 좁힐 수 있어요. (선택)</p>
+            </div>
+            <div className="section-body">
+              <div className="chip-row">
+                {scholarshipCategoryOptions.map((opt) => (
+                  <button
+                    type="button"
+                    key={opt}
+                    className={
+                      "chip-btn" +
+                      (scholarshipCategory === opt ? " chip-btn-active" : "")
+                    }
+                    onClick={() =>
+                      setScholarshipCategory((prev) => (prev === opt ? null : opt))
+                    }
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+
+              <div className="income-field" style={{ marginTop: "0.9rem" }}>
+                <input
+                  type="text"
+                  value={scholarshipKeyword}
+                  onChange={(e) => setScholarshipKeyword(e.target.value)}
+                  placeholder="키워드 예: 성적우수 / 근로 / SW / 국제 / 장학금명 일부"
+                />
+              </div>
+              <p className="section-hint">
+                예: “성적우수”, “근로”, “SW”, “국제”, “등록금”, “학과명” 등
+              </p>
+            </div>
+          </section>
 
           {/* 요약 + 제출 */}
           <footer className="question-footer">
@@ -330,6 +472,12 @@ function QuestionPage() {
                 )}
                 {specialField && (
                   <span className="summary-chip">{specialField}</span>
+                )}
+                {scholarshipCategory && (
+                  <span className="summary-chip">장학금:{scholarshipCategory}</span>
+                )}
+                {scholarshipKeyword?.trim() && (
+                  <span className="summary-chip">키워드:{scholarshipKeyword.trim()}</span>
                 )}
                 {!income && !policyField && !jobStatus && !specialField && (
                   <span className="summary-placeholder">
