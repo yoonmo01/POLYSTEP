@@ -3,6 +3,7 @@ import ForceGraph from "force-graph";
 
 const HUB_ID = "polystep";
 const DEFAULT_PAN_PADDING_PX = 24;
+const PAN_LIMIT_PX = 30; // 화면 드래그 허용 범위(아주 조금만)
 
 // 추후 사이트를 늘릴 때는 이 배열에 항목만 추가하면 됩니다.
 const DEFAULT_SITE_CATALOG = [
@@ -20,6 +21,14 @@ const DEFAULT_SITE_CATALOG = [
     url: "https://www.kosaf.go.kr/",
     summary:
       "장학금/학자금대출 등 학비 지원 정보를 제공하고 신청 절차를 안내하는 공식 기관이에요.",
+    kind: "site",
+  },
+  {
+    id: "gov24",
+    label: "정부24",
+    url: "https://www.gov.kr/",
+    summary:
+      "정부 서비스·지원 정책을 한 곳에서 검색하고 신청/민원 안내까지 확인할 수 있는 통합 포털이에요.",
     kind: "site",
   },
 ];
@@ -155,13 +164,11 @@ export default function PolicySitesGraph({
     bounce1: null,
     bounce2: null,
   });
+  const lockedZoomRef = useRef(null);
+  const baseCenterRef = useRef({ x: 0, y: 0 }); // 팬 제한 기준점(초기/fit 후 중심)
   const didInitialFitRef = useRef(false);
   const didPostLayoutFitRef = useRef(false);
   const hoverNodeRef = useRef(null);
-  const isPanningRef = useRef(false);
-  const lastPointerRef = useRef({ x: 0, y: 0, id: null });
-  const attemptedCenterRef = useRef(null);
-  const didHitWallRef = useRef(false);
 
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [hoverNode, setHoverNode] = useState(null);
@@ -248,8 +255,10 @@ export default function PolicySitesGraph({
     const fg = ForceGraph()(stageRef.current)
       .backgroundColor("rgba(0,0,0,0)")
       .enableNodeDrag(true)
-      // 기본 pan을 끄고(충돌 방지) 우리가 커스텀 팬을 제어합니다.
-      .enablePanInteraction(false);
+      // 기본 pan 사용(일반적인 '잡고 끌기' 느낌). 카메라 느낌(역방향) 제거.
+      .enablePanInteraction(true)
+      // 확대/축소(휠/트랙패드/핀치) 인터랙션 비활성화: 공간(스케일) 고정
+      .enableZoomInteraction(false);
 
     fgRef.current = fg;
 
@@ -273,7 +282,13 @@ export default function PolicySitesGraph({
     const fg = fgRef.current;
     if (!fg) return;
 
-    fg.minZoom(minZoom).maxZoom(maxZoom);
+    // 기본적으로는 줌을 잠그되, 초기 fit에서 계산된 스케일을 우선으로 사용합니다.
+    // (enableZoomInteraction(false)로 사용자 줌은 불가)
+    if (typeof lockedZoomRef.current === "number") {
+      fg.minZoom(lockedZoomRef.current).maxZoom(lockedZoomRef.current);
+    } else {
+      fg.minZoom(minZoom).maxZoom(maxZoom);
+    }
 
     // [수정] 렌더링 전에 물리 연산을 미리 수행하여 노드 위치를 잡습니다.
     // 이렇게 하면 처음에 노드가 뭉쳐 있다가 퍼지는 과정 없이 바로 정돈된 상태로 나옵니다.
@@ -291,13 +306,18 @@ export default function PolicySitesGraph({
       fg.d3VelocityDecay(0.22);
 
       const charge = fg.d3Force("charge");
-      if (charge?.strength) charge.strength(-260);
+      // 노드 간 거리(퍼짐)를 "약간" 줄이기 위해 반발을 조금 완화
+      if (charge?.strength) charge.strength(-190);
       if (charge?.distanceMin) charge.distanceMin(24);
       if (charge?.distanceMax) charge.distanceMax(900);
 
       const link = fg.d3Force("link");
-      if (link?.distance) link.distance((l) => (l?.source?.id === HUB_ID || l?.target?.id === HUB_ID ? 170 : 130));
-      if (link?.strength) link.strength(0.9);
+      // 링크 거리도 소폭 감소(허브-사이트 / 사이트-사이트)
+      if (link?.distance)
+        link.distance((l) =>
+          l?.source?.id === HUB_ID || l?.target?.id === HUB_ID ? 128 : 109
+        );
+      if (link?.strength) link.strength(1);
     } catch {
       // force 옵션이 환경에 따라 다를 수 있어 방어
     }
@@ -321,6 +341,30 @@ export default function PolicySitesGraph({
       if (!node?.url) return;
       window.open(node.url, "_blank", "noopener,noreferrer");
     });
+
+    // 드래그 중 '무거운 저항(강)' 적용:
+    // - 커서 위치로 바로 점프하지 않고, fx/fy가 목표를 천천히 따라오게(스프링/lerp)
+    // - 드래그 중 속도도 감쇠해 "무거운 물체" 느낌 강화
+    fg.onNodeDrag((node, translate) => {
+      if (!node) return;
+
+      const followFactor = 0.28; // 강한 저항(작을수록 더 무거움)
+      const tx = finiteOr(translate?.x, 0);
+      const ty = finiteOr(translate?.y, 0);
+
+      const targetFx = finiteOr(node.x, 0) + tx;
+      const targetFy = finiteOr(node.y, 0) + ty;
+
+      const curFx = node.fx == null ? finiteOr(node.x, 0) : finiteOr(node.fx, finiteOr(node.x, 0));
+      const curFy = node.fy == null ? finiteOr(node.y, 0) : finiteOr(node.fy, finiteOr(node.y, 0));
+
+      node.fx = curFx + (targetFx - curFx) * followFactor;
+      node.fy = curFy + (targetFy - curFy) * followFactor;
+
+      // 드래그 중 관성 폭주 방지(무게감)
+      node.vx = finiteOr(node.vx, 0) * 0.6;
+      node.vy = finiteOr(node.vy, 0) * 0.6;
+    });
     fg.onNodeDragEnd((node, translate) => {
       // 드래그 직후 바로 fx/fy 해제하면 "휙" 돌아가며 딱딱해 보일 수 있어,
       // 잠깐 유지 후 풀고, 관성/탄성 느낌을 위해 속도를 살짝 부여합니다.
@@ -329,8 +373,8 @@ export default function PolicySitesGraph({
       node.fx = node.x;
       node.fy = node.y;
 
-      // 작은 임펄스로 튕김 느낌
-      const impulse = 0.03;
+      // 강하게 느리게: 놓을 때 튀는 힘을 줄여서 빨리 돌아가는 느낌을 완화
+      const impulse = 0.025;
       node.vx = (node.vx ?? 0) + (translate?.x ?? 0) * impulse;
       node.vy = (node.vy ?? 0) + (translate?.y ?? 0) * impulse;
 
@@ -339,15 +383,16 @@ export default function PolicySitesGraph({
         node.fx = undefined;
         node.fy = undefined;
         fg.d3ReheatSimulation?.();
-      }, 160);
+      }, 260);
 
       // 드래그 직후 살짝 더 느리게(감쇠↓) 보이게 했다가 원복
       if (timersRef.current.restoreDecay) clearTimeout(timersRef.current.restoreDecay);
       const prevDecay = fg.d3VelocityDecay?.();
-      if (typeof prevDecay === "number") fg.d3VelocityDecay(0.16);
+      // 감쇠를 크게 올려서(더 감속) 복귀 속도를 강하게 낮춤
+      if (typeof prevDecay === "number") fg.d3VelocityDecay(0.24);
       timersRef.current.restoreDecay = setTimeout(() => {
         if (typeof prevDecay === "number") fg.d3VelocityDecay(prevDecay);
-      }, 520);
+      }, 1200);
     });
     fg.nodeCanvasObject((node, ctx, globalScale) => {
       const x = finiteOr(node.x, 0);
@@ -356,7 +401,7 @@ export default function PolicySitesGraph({
       const isHovered = hoverNode?.id === node.id;
       const isNeighbor = neighborIds.has(node.id);
       // 노드 크기 상향(가독성↑)
-      const baseR = node.kind === "hub" ? 14 : 10;
+      const baseR = node.kind === "hub" ? 28 : 20;
       const r = isHovered ? baseR * 1.35 : isNeighbor ? baseR * 1.15 : baseR;
 
       if (!isFiniteNumber(r) || r <= 0) return;
@@ -400,7 +445,7 @@ export default function PolicySitesGraph({
     fg.nodePointerAreaPaint((node, color, ctx) => {
       const x = finiteOr(node.x, 0);
       const y = finiteOr(node.y, 0);
-      const baseR = node.kind === "hub" ? 16 : 12;
+      const baseR = node.kind === "hub" ? 32 : 24;
       ctx.fillStyle = color;
       ctx.beginPath();
       ctx.arc(x, y, baseR, 0, 2 * Math.PI, false);
@@ -408,18 +453,44 @@ export default function PolicySitesGraph({
     });
     // 팬/줌 종료 시: 줌 범위 클램프 + 그래프가 화면 밖으로 나가지 않도록 중심 클램프
     fg.onZoomEnd(() => {
-      const k = fg.zoom();
-      const clamped = clamp(k, minZoom, maxZoom);
-      if (clamped !== k) fg.zoom(clamped, 80);
+      // 사용자 줌은 비활성화 상태이므로, 여기서는 경계 튕김만 처리합니다.
+      const k = fg.zoom?.() ?? lockedZoomRef.current ?? 1;
+      const maxDeltaGraph = PAN_LIMIT_PX / (isFiniteNumber(k) && k > 0 ? k : 1);
+      const cur = fg.centerAt?.() ?? { x: 0, y: 0 };
+      const curX = finiteOr(cur?.x, 0);
+      const curY = finiteOr(cur?.y, 0);
 
-      runBoundaryBounce({
-        fg,
-        width: fg.width?.() ?? 0,
-        height: fg.height?.() ?? 0,
-        paddingPx: DEFAULT_PAN_PADDING_PX,
-        attemptCenter: null,
-        timersRef,
-      });
+      const base = baseCenterRef.current ?? { x: 0, y: 0 };
+      const targetX = clamp(curX, base.x - maxDeltaGraph, base.x + maxDeltaGraph);
+      const targetY = clamp(curY, base.y - maxDeltaGraph, base.y + maxDeltaGraph);
+
+      // 제한 범위를 넘어갔으면 살짝 튕기듯 돌아오게
+      if (targetX !== curX || targetY !== curY) {
+        runBoundaryBounce({
+          fg,
+          width: fg.width?.() ?? 0,
+          height: fg.height?.() ?? 0,
+          paddingPx: 0,
+          attemptCenter: { x: curX, y: curY },
+          timersRef,
+        });
+        fg.centerAt(targetX, targetY, 120);
+      }
+    });
+
+    // 드래그 중에도 너무 멀리 못 가게 즉시 클램프(체감상 "아주 조금만" 이동)
+    fg.onZoom?.(() => {
+      const k = fg.zoom?.() ?? lockedZoomRef.current ?? 1;
+      const maxDeltaGraph = PAN_LIMIT_PX / (isFiniteNumber(k) && k > 0 ? k : 1);
+      const cur = fg.centerAt?.() ?? { x: 0, y: 0 };
+      const curX = finiteOr(cur?.x, 0);
+      const curY = finiteOr(cur?.y, 0);
+      const base = baseCenterRef.current ?? { x: 0, y: 0 };
+      const targetX = clamp(curX, base.x - maxDeltaGraph, base.x + maxDeltaGraph);
+      const targetY = clamp(curY, base.y - maxDeltaGraph, base.y + maxDeltaGraph);
+      if (targetX !== curX || targetY !== curY) {
+        fg.centerAt(targetX, targetY, 0);
+      }
     });
 
     // [수정] 엔진 정지 시 확실하게 중앙으로 이동
@@ -447,90 +518,6 @@ export default function PolicySitesGraph({
   const width = size.width || 800;
   const height = size.height || 520;
 
-  // 커스텀 "카메라 느낌" 팬(역방향):
-  // - 배경을 드래그하면 카메라 중심이 드래그 방향으로 이동 → 그래프는 반대로 움직이는 체감
-  useEffect(() => {
-    const stageEl = stageRef.current;
-    const fg = fgRef.current;
-    if (!stageEl || !fg) return;
-
-    const onPointerDown = (e) => {
-      if (e.button !== 0) return;
-      if (hoverNodeRef.current) return; // 노드 위에서는 팬 시작하지 않음(노드 드래그 우선)
-
-      isPanningRef.current = true;
-      lastPointerRef.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
-      attemptedCenterRef.current = null;
-      didHitWallRef.current = false;
-
-      stageEl.setPointerCapture?.(e.pointerId);
-    };
-
-    const onPointerMove = (e) => {
-      if (!isPanningRef.current) return;
-      if (lastPointerRef.current.id !== e.pointerId) return;
-
-      const dx = e.clientX - lastPointerRef.current.x;
-      const dy = e.clientY - lastPointerRef.current.y;
-      lastPointerRef.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
-
-      const k = fg.zoom?.() ?? 1;
-      if (!isFiniteNumber(k) || k <= 0) return;
-
-      const cur = fg.centerAt?.() ?? { x: 0, y: 0 };
-      const curX = finiteOr(cur?.x, 0);
-      const curY = finiteOr(cur?.y, 0);
-
-      // 카메라 느낌(역방향): 드래그 방향으로 카메라 중심 이동
-      const nextX = curX + dx / k;
-      const nextY = curY + dy / k;
-      fg.centerAt(nextX, nextY, 0);
-
-      // 경계 밖으로는 못 나가게 즉시 클램프(벽에 '붙는' 느낌)
-      const clampInfo = computeClampedCenterToKeepBboxInView(
-        fg,
-        width,
-        height,
-        DEFAULT_PAN_PADDING_PX
-      );
-      if (clampInfo?.didClamp) {
-        didHitWallRef.current = true;
-        attemptedCenterRef.current = { x: nextX, y: nextY };
-        fg.centerAt(clampInfo.targetX, clampInfo.targetY, 0);
-      }
-    };
-
-    const endPan = (e) => {
-      if (!isPanningRef.current) return;
-      isPanningRef.current = false;
-      stageEl.releasePointerCapture?.(e.pointerId);
-
-      // 벽에 닿으려고 밀었던 경우에만 튕김 애니메이션을 실행
-      if (didHitWallRef.current) {
-        runBoundaryBounce({
-          fg,
-          width,
-          height,
-          paddingPx: DEFAULT_PAN_PADDING_PX,
-          attemptCenter: attemptedCenterRef.current,
-          timersRef,
-        });
-      }
-    };
-
-    stageEl.addEventListener("pointerdown", onPointerDown);
-    stageEl.addEventListener("pointermove", onPointerMove);
-    stageEl.addEventListener("pointerup", endPan);
-    stageEl.addEventListener("pointercancel", endPan);
-
-    return () => {
-      stageEl.removeEventListener("pointerdown", onPointerDown);
-      stageEl.removeEventListener("pointermove", onPointerMove);
-      stageEl.removeEventListener("pointerup", endPan);
-      stageEl.removeEventListener("pointercancel", endPan);
-    };
-  }, [width, height]);
-
   // 사이즈 변경 시 그래프 캔버스 사이즈 반영
   useEffect(() => {
     if (!fgRef.current) return;
@@ -547,11 +534,19 @@ export default function PolicySitesGraph({
         // 1. 화면에 딱 맞게 줌 (여백 포함)
         fg.zoomToFit(200, DEFAULT_PAN_PADDING_PX);
 
-        // 2. 줌 레벨이 너무 작거나 크면 보정
+        // 2. 현재 fit 스케일을 "고정 줌"으로 잠금(확대/축소 불가)
         const k = fg.zoom();
-        const clamped = clamp(k, minZoom, maxZoom);
-        if (clamped !== k) {
-          fg.zoom(clamped, 200);
+        if (isFiniteNumber(k) && k > 0) {
+          lockedZoomRef.current = k;
+          fg.minZoom(k).maxZoom(k);
+        }
+
+        // 3. 팬 제한 기준점 업데이트(항상 중앙 기준에서 아주 조금만 이동 가능)
+        const c = fg.centerAt?.();
+        if (c && isFiniteNumber(c.x) && isFiniteNumber(c.y)) {
+          baseCenterRef.current = { x: c.x, y: c.y };
+        } else {
+          baseCenterRef.current = { x: 0, y: 0 };
         }
       });
 
