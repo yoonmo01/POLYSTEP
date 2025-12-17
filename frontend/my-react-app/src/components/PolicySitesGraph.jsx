@@ -213,6 +213,25 @@ function finiteOr(value, fallback) {
   return isFiniteNumber(value) ? value : fallback;
 }
 
+// 문자열 기반으로 0~1 사이의 안정적인 난수 값을 만들기(매 렌더/매 프레임마다 바뀌지 않게)
+function stableRand01(seed) {
+  const str = String(seed ?? "");
+  let h = 2166136261; // FNV-1a 32-bit
+  for (let i = 0; i < str.length; i += 1) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  // 0..1
+  return (h >>> 0) / 4294967295;
+}
+
+function clampAbs(v, maxAbs) {
+  if (!isFiniteNumber(v)) return 0;
+  const m = Math.abs(maxAbs);
+  if (!isFiniteNumber(m) || m <= 0) return v;
+  return clamp(v, -m, m);
+}
+
 function computeClampedCenterToKeepBboxInView(fg, width, height, paddingPx) {
   if (!fg || !width || !height) return;
   if (typeof fg.getGraphBbox !== "function" || typeof fg.centerAt !== "function") return;
@@ -358,10 +377,17 @@ export default function PolicySitesGraph({
       })),
     ];
 
-    const links = sites.map((s) => ({
-      source: HUB_ID,
-      target: s.id,
-    }));
+    // 링크 거리는 "랜덤"처럼 보이되, 매 프레임마다 바뀌면 어색하게 흔들립니다.
+    // 그래서 링크마다 한 번 계산한 값을 고정해서 사용합니다.
+    const links = sites.map((s) => {
+      const u = stableRand01(`${HUB_ID}->${s.id}`);
+      const linkDistance = 50 + u * 130; // 링크 길이
+      return {
+        source: HUB_ID,
+        target: s.id,
+        linkDistance,
+      };
+    });
 
     return { nodes, links };
   }, [sites]);
@@ -372,19 +398,21 @@ export default function PolicySitesGraph({
     didPostLayoutFitRef.current = false;
   }, [graphData]);
 
-  const neighborIds = useMemo(() => {
-    const set = new Set();
-    if (!hoverNode) return set;
-
-    const hoveredId = hoverNode.id;
+  // 호버로 인해 graph 설정(useEffect)이 다시 실행되며 시뮬레이션이 '재가열'되는 문제를 막기 위해,
+  // 이웃 관계는 "그래프 데이터 기준으로만" 한 번 계산해두고, 렌더링에서는 hoverNodeRef로만 판별합니다.
+  const adjacencyMap = useMemo(() => {
+    const map = new Map();
     for (const l of graphData.links) {
       const src = typeof l.source === "object" ? l.source.id : l.source;
       const tgt = typeof l.target === "object" ? l.target.id : l.target;
-      if (src === hoveredId) set.add(tgt);
-      if (tgt === hoveredId) set.add(src);
+      if (!src || !tgt) continue;
+      if (!map.has(src)) map.set(src, new Set());
+      if (!map.has(tgt)) map.set(tgt, new Set());
+      map.get(src).add(tgt);
+      map.get(tgt).add(src);
     }
-    return set;
-  }, [graphData.links, hoverNode]);
+    return map;
+  }, [graphData.links]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -455,9 +483,10 @@ export default function PolicySitesGraph({
       fg.minZoom(minZoom).maxZoom(maxZoom);
     }
 
-    // [수정] 렌더링 전에 물리 연산을 미리 수행하여 노드 위치를 잡습니다.
-    // 이렇게 하면 처음에 노드가 뭉쳐 있다가 퍼지는 과정 없이 바로 정돈된 상태로 나옵니다.
-    fg.cooldownTicks(100);
+    // [수정] 이전에는 cooldownTicks(100) 때문에 시뮬레이션이 "한 번씩 멈추는" 현상이 있었습니다.
+    // 멈추지 않고 계속 자연스럽게 떠다니게 하려면 cooldown을 무한으로 두는 게 안전합니다.
+    fg.cooldownTicks(Infinity);
+    fg.cooldownTime(Infinity);
 
     fg.graphData(graphData);
 
@@ -468,39 +497,58 @@ export default function PolicySitesGraph({
     // - 링크 거리 증가
     // - 감쇠를 낮춰(관성↑) 너무 빨리 복원되는 느낌 완화
     try {
-      fg.d3VelocityDecay(0.22);
+      fg.d3VelocityDecay(0.05);
 
       const charge = fg.d3Force("charge");
-      // 노드 간 거리(퍼짐)를 "약간" 줄이기 위해 반발을 조금 완화
-      if (charge?.strength) charge.strength(-190);
-      if (charge?.distanceMin) charge.distanceMin(24);
-      if (charge?.distanceMax) charge.distanceMax(900);
+      
+      if (charge?.strength) charge.strength(-800); // 노드 간 반발력
+      if (charge?.distanceMin) charge.distanceMin(50);
+      if (charge?.distanceMax) charge.distanceMax(2000);
 
       const link = fg.d3Force("link");
-      // 링크 거리도 소폭 감소(허브-사이트 / 사이트-사이트)
-      if (link?.distance)
-        link.distance((l) =>
-          l?.source?.id === HUB_ID || l?.target?.id === HUB_ID ? 128 : 109
-        );
-      if (link?.strength) link.strength(1);
+      // 링크 거리: 링크마다 고정된 랜덤값(linkDistance)을 사용 (매 프레임 랜덤 금지)
+      if (link?.distance) link.distance((l) => l?.linkDistance ?? 160);
+      if (link?.strength) link.strength(0.8); // 텐션을 살짝 낮춰서 자연스럽게
+
+      // 충돌 방지 포스 추가 (노드 반지름보다 살짝 크게)
+      fg.d3Force("collide", (node) => {
+        const r = node.kind === "hub" ? 40 : 25; 
+        return r * 1.5; // 여유 공간
+      });
+
     } catch {
       // force 옵션이 환경에 따라 다를 수 있어 방어
     }
 
-    fg.linkColor(() =>
-      hoverNode ? "rgba(191, 219, 254, 0.22)" : "rgba(148, 163, 184, 0.18)"
-    );
-    fg.linkWidth((link) => {
-      if (!hoverNode) return 1;
+    // 링크 스타일은 함수로 등록해 두고(hoverNodeRef 기반), 호버 시에는 "리렌더만" 트리거합니다.
+    // 이렇게 하면 hover로 인해 이 effect가 다시 실행되지 않아, 엔진이 다시 '꿈틀'거리지 않습니다.
+    fg.linkColor((link) => {
+      const hoveredId = hoverNodeRef.current?.id;
+      if (!hoveredId) return "rgba(148, 163, 184, 0.18)";
       const src = typeof link.source === "object" ? link.source.id : link.source;
       const tgt = typeof link.target === "object" ? link.target.id : link.target;
-      const hoveredId = hoverNode.id;
+      const isAdjacent = src === hoveredId || tgt === hoveredId;
+      return isAdjacent ? "rgba(191, 219, 254, 0.28)" : "rgba(148, 163, 184, 0.08)";
+    });
+    fg.linkWidth((link) => {
+      const hoveredId = hoverNodeRef.current?.id;
+      if (!hoveredId) return 1;
+      const src = typeof link.source === "object" ? link.source.id : link.source;
+      const tgt = typeof link.target === "object" ? link.target.id : link.target;
       const isAdjacent = src === hoveredId || tgt === hoveredId;
       return isAdjacent ? 2 : 1;
     });
+
     fg.onNodeHover((node) => {
       hoverNodeRef.current = node || null;
       setHoverNode(node || null);
+
+      if (containerRef.current) {
+        containerRef.current.style.cursor = node ? "pointer" : "default";
+      }
+
+      // 호버로 스타일만 바뀌도록 캔버스만 갱신 (엔진 재가열 X)
+      fg.refresh?.();
     });
     fg.onNodeClick((node) => {
       if (!node?.url) return;
@@ -563,48 +611,46 @@ export default function PolicySitesGraph({
         const x = finiteOr(node.x, 0);
         const y = finiteOr(node.y, 0);
 
-        const isHovered = hoverNode?.id === node.id;
-        const isNeighbor = neighborIds.has(node.id);
-        // 노드 크기 상향(가독성↑)
-        const baseR = node.kind === "hub" ? 28 : 20;
-        const r = isHovered ? baseR * 1.35 : isNeighbor ? baseR * 1.15 : baseR;
+        const hoveredId = hoverNodeRef.current?.id;
+        const isHovered = hoveredId === node.id;
+        const neighborSet = hoveredId ? adjacencyMap.get(hoveredId) : null;
+        const isNeighbor = !!neighborSet && neighborSet.has(node.id);
+        
+        // 노드 크기 조정 (Hub는 크게, Site는 작게)
+        const baseR = node.kind === "hub" ? 36 : 14; 
+        const r = isHovered ? baseR * 1.4 : isNeighbor ? baseR * 1.2 : baseR;
 
         if (!isFiniteNumber(r) || r <= 0) return;
 
         // --- iOS Style Design ---
 
         // 1. Gradients & Shadows
-        // 상단-좌측에서 하단-우측으로 떨어지는 부드러운 그라데이션
         const gradient = ctx.createLinearGradient(x - r, y - r, x + r, y + r);
 
         if (node.kind === "hub") {
-          // Hub: iOS Blue (San Francisco Blue 느낌)
-          // Hover 시 조금 더 밝고 채도 높게
           if (isHovered) {
             gradient.addColorStop(0, "#60A5FA"); // Blue-400
             gradient.addColorStop(1, "#2563EB"); // Blue-600
-            ctx.shadowColor = "rgba(37, 99, 235, 0.5)"; // Blue glow shadow
+            ctx.shadowColor = "rgba(37, 99, 235, 0.6)"; 
           } else {
             gradient.addColorStop(0, "#93C5FD"); // Blue-300
             gradient.addColorStop(1, "#3B82F6"); // Blue-500
-            ctx.shadowColor = "rgba(0, 0, 0, 0.2)"; // Natural shadow
+            ctx.shadowColor = "rgba(0, 0, 0, 0.25)"; 
           }
         } else {
-          // Site: iOS System Gray / White (깔끔한 앱 아이콘 배경색)
+          // Site: 깔끔한 화이트/그레이
           if (isHovered) {
             gradient.addColorStop(0, "#FFFFFF");
-            gradient.addColorStop(1, "#F1F5F9"); // Slate-100
-            ctx.shadowColor = "rgba(255, 255, 255, 0.4)"; // White glow
+            gradient.addColorStop(1, "#F1F5F9"); 
+            ctx.shadowColor = "rgba(255, 255, 255, 0.5)"; 
           } else {
-            gradient.addColorStop(0, "#F8FAFC"); // Slate-50
-            gradient.addColorStop(1, "#CBD5E1"); // Slate-300
+            gradient.addColorStop(0, "#F8FAFC"); 
+            gradient.addColorStop(1, "#E2E8F0"); 
             ctx.shadowColor = "rgba(0, 0, 0, 0.15)";
           }
         }
 
-        // Drop Shadow (Elevation)
-        // 부드럽고 넓게 퍼지는 그림자로 깊이감 표현
-        ctx.shadowBlur = isHovered ? 16 : 8;
+        ctx.shadowBlur = isHovered ? 20 : 8;
         ctx.shadowOffsetY = isHovered ? 6 : 3;
 
         // 2. Main Circle
@@ -613,38 +659,39 @@ export default function PolicySitesGraph({
         ctx.fillStyle = gradient;
         ctx.fill();
 
-        // 3. Subtle Inner Highlight (Top Reflection)
-        // 위쪽에 살짝 맺히는 빛으로 볼륨감(Convex) 표현
-        ctx.shadowColor = "transparent"; // 그림자 끄고 하이라이트만
+        // 3. Subtle Inner Highlight
+        ctx.shadowColor = "transparent"; 
         ctx.shadowBlur = 0;
         ctx.shadowOffsetY = 0;
 
         const highlightGrad = ctx.createLinearGradient(x, y - r, x, y);
-        highlightGrad.addColorStop(0, "rgba(255, 255, 255, 0.35)");
-        highlightGrad.addColorStop(0.5, "rgba(255, 255, 255, 0.05)");
+        highlightGrad.addColorStop(0, "rgba(255, 255, 255, 0.4)");
+        highlightGrad.addColorStop(0.5, "rgba(255, 255, 255, 0.1)");
         highlightGrad.addColorStop(1, "rgba(255, 255, 255, 0)");
 
         ctx.beginPath();
-        ctx.arc(x, y, r, 0, 2 * Math.PI, false); // 전체 덮되 그라데이션으로 상단만 보이게
+        ctx.arc(x, y, r, 0, 2 * Math.PI, false); 
         ctx.fillStyle = highlightGrad;
         ctx.fill();
 
-        // 4. Label
+        // 4. Label (Spacing Improved)
         const label = node.label ?? String(node.id);
-        const fontSize = clamp(12 / globalScale, 14, 18);
-        // iOS 시스템 폰트 스택
+        // 폰트는 줌아웃 시 조금 더 작게 보이도록 조정
+        const fontSize = clamp(12 / globalScale, 12, 16); 
+        
         ctx.font = `600 \${fontSize}px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Helvetica, Arial, sans-serif`;
-
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
 
-        // 텍스트 가독성: 배경이 어두우므로 밝은 색 + 부드러운 그림자
-        ctx.shadowColor = "rgba(0, 0, 0, 0.4)";
-        ctx.shadowBlur = 3;
+        // 텍스트 스타일: 가독성 확보
+        ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
+        ctx.shadowBlur = 4;
         ctx.shadowOffsetY = 1;
         ctx.fillStyle = "#FFFFFF";
 
-        ctx.fillText(label, x, y + r + 6 / globalScale);
+        // 노드 아래 여백을 줌 레벨에 따라 동적으로 (겹침 방지)
+        const textY = y + r + (6 / globalScale);
+        ctx.fillText(label, x, textY);
 
         // Reset
         ctx.shadowColor = "transparent";
@@ -713,7 +760,7 @@ export default function PolicySitesGraph({
     }, 50);
 
     return () => clearTimeout(fitTimer);
-  }, [graphData, hoverNode, neighborIds, minZoom, maxZoom]);
+  }, [graphData, adjacencyMap, minZoom, maxZoom]);
 
   const handleMouseMove = (e) => {
     if (!containerRef.current) return;
