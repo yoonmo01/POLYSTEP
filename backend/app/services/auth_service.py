@@ -19,6 +19,13 @@ class AuthService:
             email=user_in.email,
             hashed_password=hashed,
             full_name=user_in.full_name,
+            age=user_in.age,
+            region=user_in.region,
+            is_student=user_in.is_student,
+            academic_status=user_in.academic_status,
+            major=user_in.major,
+            grade=user_in.grade,
+            gpa=user_in.gpa,
         )
         db.add(user)
         db.commit()

@@ -11,7 +11,9 @@ from sqlalchemy import (
     Boolean,
     ForeignKey,
     JSON,
+    Float
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
 from app.db import Base
@@ -30,6 +32,14 @@ class User(Base):
     email = Column(String(255), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
     full_name = Column(String(255), nullable=True)
+    age = Column(Integer, nullable=True)
+    region = Column(String(64), nullable=True)
+    is_student = Column(Boolean, nullable=True)        # 학생 여부
+    academic_status = Column(String(32), nullable=True)
+    # 예: 재학 / 휴학 / 졸업예정 / 졸업
+    major = Column(String(128), nullable=True)         # 전공
+    grade = Column(Integer, nullable=True)             # 학년 (1~4)
+    gpa = Column(Float, nullable=True)                 # 평균평점 (선택)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -150,7 +160,34 @@ class Scholarship(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    llm_caches = relationship(
+        "ScholarshipLLMCache",
+        back_populates="scholarship",
+        cascade="all, delete-orphan",
+    )
 
+
+class ScholarshipLLMCache(Base):
+    """
+    장학금 원문 텍스트(선발/유지/지급액)를 LLM으로 '카드형'으로 정리한 결과를 캐시.
+    - 장학금 내용은 자주 안 바뀌므로 scholarship_id + prompt_version 단위로 캐시하면
+      ResultPage 진입마다 LLM을 다시 부르지 않아도 됨(속도/비용/안정성).
+    """
+    __tablename__ = "scholarship_llm_cache"
+
+    id = Column(Integer, primary_key=True, index=True)
+    scholarship_id = Column(Integer, ForeignKey("scholarships.id"), nullable=False, index=True)
+
+    # 프롬프트/출력 스키마가 바뀌면 버전만 올려서 캐시 재생성 가능
+    prompt_version = Column(Integer, nullable=False, default=1, index=True)
+
+    # LLM이 만든 "카드" JSON 그대로 저장
+    card_json = Column(JSON, nullable=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    scholarship = relationship("Scholarship", back_populates="llm_caches")
 
 class ScholarshipCommonRule(Base):
     __tablename__ = "scholarship_common_rules"
@@ -165,3 +202,53 @@ class ScholarshipCommonRule(Base):
     source_url = Column(String(1024), nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
+    
+
+class RecommendationSession(Base):
+    __tablename__ = "recommendation_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+
+    conditions = Column(JSON, nullable=True)
+    scholarships = Column(JSONB, nullable=False, default=list)
+
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    user = relationship("User")
+    items = relationship(
+        "RecommendationItem",
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
+
+
+class RecommendationItem(Base):
+    __tablename__ = "recommendation_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("recommendation_sessions.id"), nullable=False, index=True)
+    policy_id = Column(Integer, ForeignKey("policies.id"), nullable=False, index=True)
+    badge_status = Column(String(16), nullable=True)
+    score = Column(Float, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    session = relationship("RecommendationSession", back_populates="items")
+    policy = relationship("Policy")
+
+
+class PolicyView(Base):
+    __tablename__ = "policy_views"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    policy_id = Column(Integer, ForeignKey("policies.id"), nullable=False, index=True)
+
+    # WS done에서 verification_id를 받으면 같이 저장 가능 (지금은 optional)
+    verification_id = Column(Integer, ForeignKey("policy_verifications.id"), nullable=True)
+    scholarship = Column(JSONB, nullable=True)
+    viewed_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    user = relationship("User")
+    policy = relationship("Policy")
+    verification = relationship("PolicyVerification")

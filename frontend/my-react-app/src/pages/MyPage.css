@@ -1,3 +1,5 @@
+/* frontend/my-react-app/src/pages/MyPage.css */
+
 .mypage {
   min-height: 100vh;
   padding: 4rem 1.5rem 3rem;
@@ -40,6 +42,7 @@
     0 0 0 1px rgba(148, 163, 184, 0.25);
   border: 1px solid rgba(148, 163, 184, 0.42);
   color: #e5e7eb;
+  min-width: 0; /* ✅ grid item overflow 방지 */
 }
 
 .mypage-card-head {
@@ -51,44 +54,96 @@
 }
 
 .mypage-card-head h2 {
-  font-size: 1rem;
+  font-size: 1.02rem;
+  font-weight: 900;
+  letter-spacing: 0.01em;
   color: #f9fafb;
+}
+
+.subtle-count {
+  font-size: 0.78rem;
+  color: #9ca3af;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(2, 6, 23, 0.25);
 }
 
 /* 상단 2열 레이아웃 */
 .mypage-top-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.1fr);
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
   gap: 1.4rem;
 }
 
-/* 프로필 카드 */
-.profile-info-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.8rem 1.2rem;
+/* ✅ 상단 카드 체감 크기 맞춤 */
+.mypage-top-grid > .mypage-card {
+  min-height: 230px;
 }
 
-.profile-info-item {
+/* 프로필: 컴팩트 */
+.profile-card-compact {
+  padding: 1.35rem 1.45rem;
+}
+
+.profile-compact {
+  display: flex;
+  gap: 0.95rem;
+  align-items: flex-start;
+}
+
+.profile-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  color: #bfdbfe;
+  background: rgba(2, 6, 23, 0.35);
+  border: 1px solid rgba(191, 219, 254, 0.35);
+  flex: 0 0 auto;
+}
+
+.profile-compact-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.profile-name-row {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 0.18rem;
 }
 
-.profile-info-item .label {
-  font-size: 0.78rem;
+.profile-name {
+  font-size: 1.02rem;
+  font-weight: 900;
+  color: #f9fafb;
+  line-height: 1.2;
+}
+
+.profile-email {
+  font-size: 0.82rem;
   color: #9ca3af;
+  word-break: break-word;
 }
 
-.profile-info-item .value {
-  font-size: 0.9rem;
+.profile-chips {
+  margin-top: 0.7rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.profile-chip {
+  font-size: 0.78rem;
+  padding: 0.22rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid rgba(191, 219, 254, 0.35);
+  background: rgba(15, 23, 42, 0.65);
   color: #e5e7eb;
-}
-
-.profile-hint {
-  margin-top: 0.9rem;
-  font-size: 0.78rem;
-  color: #9ca3af;
 }
 
 /* 버튼들 */
@@ -119,6 +174,50 @@
 }
 
 /* 최근 추천 카드 */
+.recent-scroll {
+  max-height: 520px;
+  overflow: auto;
+  padding-right: 6px;
+}
+
+.recent-details {
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 10px;
+  background: rgba(2, 6, 23, 0.12);
+}
+
+.recent-summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.recent-summary::-webkit-details-marker {
+  display: none;
+}
+
+.recent-summary-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.recent-summary-time {
+  font-weight: 900;
+}
+
+.recent-summary-sub {
+  opacity: 0.9;
+}
+
+.recent-details-body {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .recent-list {
   list-style: none;
   margin: 0;
@@ -135,36 +234,85 @@
   gap: 0.6rem;
   padding: 0.65rem 0.75rem;
   border-radius: 12px;
-  background: rgba(15, 23, 42, 0.96);
-  border: 1px solid rgba(51, 65, 85, 0.9);
+  background: rgba(2, 6, 23, 0.28);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  min-width: 0; /* ✅ 텍스트 overflow 방지 */
 }
 
 .recent-main {
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
+  min-width: 0;
 }
 
 .recent-title {
+  margin: 0;
   font-size: 0.9rem;
+  font-weight: 800;
   color: #f9fafb;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .recent-meta {
+  margin: 0;
   font-size: 0.78rem;
   color: #9ca3af;
   display: flex;
   gap: 0.3rem;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .recent-status {
-  font-size: 0.75rem;
-  padding: 0.2rem 0.7rem;
+  width: 40px;
+  height: 25px;
+  padding: 0;
   border-radius: 999px;
-  border: 1px solid rgba(191, 219, 254, 0.8);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  line-height: 1;
+  font-size: 0.70rem;
+  font-weight: 900;
+  border: 1px solid rgba(191, 219, 254, 0.45);
   background: rgba(15, 23, 42, 0.9);
   color: #bfdbfe;
+}
+
+/* 상태 뱃지 색상 */
+.recent-status.status-pass,
+.recent-status.status-success {
+  border-color: rgba(34,197,94,0.7);
+  background: rgba(34,197,94,0.15);
+  color: #bbf7d0;
+}
+
+.recent-status.status-warning,
+.recent-status.status-running {
+  border-color: rgba(245,158,11,0.7);
+  background: rgba(245,158,11,0.15);
+  color: #fde68a;
+}
+
+.recent-status.status-fail {
+  border-color: rgba(239,68,68,0.7);
+  background: rgba(239,68,68,0.15);
+  color: #fecaca;
+}
+
+.recent-status.status-recommend {
+  border-color: rgba(37,99,235,0.9);
+  background: linear-gradient(
+    to right,
+    rgba(37,99,235,0.25),
+    rgba(79,70,229,0.25)
+  );
+  color: #e0e7ff;
 }
 
 /* 빈 상태 */
@@ -182,6 +330,13 @@
   gap: 1.4rem;
 }
 
+/* ✅ history 스크롤 영역 */
+.history-scroll {
+  max-height: 520px;
+  overflow: auto;
+  padding-right: 6px;
+}
+
 /* 히스토리 리스트 */
 .history-list {
   list-style: none;
@@ -192,34 +347,84 @@
   gap: 0.5rem;
 }
 
-.history-item {
-  display: flex;
-  align-items: center;
+.history-list-rows {
   gap: 0.6rem;
-  padding: 0.5rem 0.2rem;
 }
 
-.history-item .dot {
+.history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 14px;
+  background: rgba(2, 6, 23, 0.28);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  min-width: 0;
+}
+
+.history-row-left {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.dot {
   width: 6px;
   height: 6px;
   border-radius: 999px;
   background: #60a5fa;
+  flex: 0 0 auto;
 }
 
 .history-texts {
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
+  min-width: 0;
 }
 
 .history-title {
+  margin: 0;
   font-size: 0.86rem;
+  font-weight: 800;
   color: #e5e7eb;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .history-meta {
+  margin: 0;
   font-size: 0.78rem;
   color: #9ca3af;
+  overflow-wrap: anywhere;
+}
+
+/* row 링크 버튼 */
+.row-link-btn {
+  padding: 0.42rem 0.8rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f9fafb;
+  font-size: 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+  backdrop-filter: blur(6px);
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    transform 0.15s ease,
+    box-shadow 0.18s ease;
+}
+
+.row-link-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.42);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
 }
 
 /* CTA 카드 */
@@ -235,7 +440,8 @@
 }
 
 .mypage-cta-card h2 {
-  font-size: 1rem;
+  font-size: 1.05rem;
+  font-weight: 900;
   color: #f9fafb;
   margin-bottom: 0.4rem;
 }
@@ -243,6 +449,8 @@
 .mypage-cta-card p {
   font-size: 0.84rem;
   color: #e5e7eb;
+  opacity: 0.95;
+  line-height: 1.55;
 }
 
 .mypage-cta-actions {
@@ -269,7 +477,6 @@
     border-color 0.16s ease;
 }
 
-/* 메인 CTA */
 .mypage-primary-btn {
   background: linear-gradient(to right, #2563eb, #4f46e5);
   color: #f9fafb;
@@ -282,7 +489,6 @@
   box-shadow: 0 22px 44px rgba(15, 23, 42, 1);
 }
 
-/* 서브 CTA */
 .mypage-secondary-btn {
   background: rgba(15, 23, 42, 0.9);
   color: #e5e7eb;
@@ -295,7 +501,7 @@
   box-shadow: 0 16px 34px rgba(15, 23, 42, 0.9);
 }
 
-/* 모바일 대응 */
+/* 모바일 */
 .only-mobile {
   display: none;
 }
@@ -326,8 +532,18 @@
     border-radius: 18px;
   }
 
-  .profile-info-grid {
-    grid-template-columns: 1fr;
+  .mypage-top-grid > .mypage-card {
+    min-height: auto;
+  }
+
+  .profile-compact {
+    gap: 0.8rem;
+  }
+
+  .profile-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 14px;
   }
 
   .mypage-cta-actions {

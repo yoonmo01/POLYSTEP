@@ -13,6 +13,7 @@ from fastapi import (
     BackgroundTasks,
     WebSocket,
     WebSocketDisconnect,
+    Query,
 )
 from sqlalchemy.orm import Session
 
@@ -40,16 +41,28 @@ logger = logging.getLogger(__name__)
 # ===== Fast Track: 검색 & Eligibility =====
 @router.get("/search", response_model=List[PolicySearchResult])
 def search_policies(
-    req: PolicySearchRequest = Depends(),
+    query: Optional[str] = Query(None),
+    age: Optional[int] = Query(None),
+    region: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
+    req = PolicySearchRequest(
+        query=query,
+        age=age,
+        region=region,
+        category=category,
+    )
     return PolicyService.search_policies(db, req)
 
 # ✅ 검색 → 기준 + 유사 5개 한 번에 받기
 @router.get("/search_with_similar", response_model=SimilarPoliciesResponse)
 def search_policies_with_similar(
-    req: PolicySearchRequest = Depends(),
+    query: Optional[str] = Query(None),
+    age: Optional[int] = Query(None),
+    region: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
@@ -59,10 +72,22 @@ def search_policies_with_similar(
     - query / age / region / category 로 검색
     - 가장 잘 맞는 기준 정책 1개 + 그와 유사한 정책 5개를 한 번에 반환
     """
+    req = PolicySearchRequest(
+        query=query,
+        age=age,
+        region=region,
+        category=category,
+    )
+
+    # 🔥 디버깅용 (한 번만 찍어보고 확인)
+    logger.info("[search_with_similar] req=%s", req.model_dump())
+
     result = PolicyService.search_policies_with_similars(db, req)
     if result is None:
         return SimilarPoliciesResponse(base_policy=None, similar_policies=[])
     return result
+
+
 @router.get("/{policy_id}", response_model=PolicyDetailResponse)
 def get_policy_detail(
     policy_id: int,

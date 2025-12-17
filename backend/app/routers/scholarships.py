@@ -6,14 +6,19 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
 from app.db import get_db
-from app.models import Scholarship, ScholarshipCommonRule
+from app.models import Scholarship, ScholarshipCommonRule, User
 from app.schemas import (
     ScholarshipCreate,
     ScholarshipRead,
     ScholarshipUpdate,
     ScholarshipBundleResponse,
     ScholarshipCommonRuleRead,
+    ScholarshipRecommendResponse,
+    ScholarshipRecommendItem,
+    ScholarshipLLMCard,
 )
+from app.deps import get_current_user
+from app.services.llm_service import LLMService
 
 router = APIRouter()
 
@@ -44,6 +49,63 @@ def list_scholarships(
 
     return q.order_by(Scholarship.id.asc()).offset(offset).limit(limit).all()
 
+@router.get("/recommend", response_model=ScholarshipRecommendResponse)
+def recommend_scholarships(
+    category: Optional[str] = Query(None, description="성적/복지/근로/SW/국제/기타"),
+    limit: int = Query(5, ge=1, le=20),
+    force_llm: bool = Query(False, description="캐시 무시하고 LLM 재생성(디버그용)"),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """
+    ✅ ResultPage에서 '장학금 추천'을 정책 추천과 분리해서 가져가기 위한 엔드포인트.
+    - 장학금 목록을 가져오고
+    - LLM 카드 요약을 캐시 기반으로 붙여서 반환
+    """
+    q = db.query(Scholarship)
+    if category:
+        q = q.filter(Scholarship.category == category)
+
+    rows = q.order_by(Scholarship.id.asc()).limit(limit).all()
+
+    items: List[ScholarshipRecommendItem] = []
+
+    for s in rows:
+        card_json = LLMService.get_or_make_scholarship_card(
+            db=db,
+            scholarship=s,
+            force=force_llm,
+        )
+
+        # ✅ 개인맞춤(빡빡하지 않게) 판정
+        fit = LLMService.evaluate_scholarship_user_fit(
+            user=user,
+            scholarship=s,
+            card_json=card_json,
+        )
+
+        # ✅ recommendation_reason는 "요약" 용도로만(기존 UX 유지)
+        # user_fit_reason가 있으면 그걸 재사용
+        recommendation_reason = fit.get("user_fit_reason")
+
+        items.append(
+            ScholarshipRecommendItem(
+                id=s.id,
+                name=s.name,
+                category=s.category,
+                source_url=s.source_url,
+                selection_criteria=s.selection_criteria,
+                retention_condition=s.retention_condition,
+                benefit=s.benefit,
+                llm_card=ScholarshipLLMCard(**card_json),
+                recommendation_reason=recommendation_reason,
+                user_fit=fit.get("user_fit", "WARNING"),
+                user_fit_reason=fit.get("user_fit_reason"),
+                missing_info=fit.get("missing_info") or [],
+            )
+        )
+
+    return ScholarshipRecommendResponse(items=items)
 
 # ✅ 고정 라우트들은 동적 라우트("/{scholarship_id}")보다 위에!
 @router.get("/bundle", response_model=ScholarshipBundleResponse)

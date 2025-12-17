@@ -11,24 +11,41 @@ import ResultPage from "./pages/ResultPage";
 import FinalPage from "./pages/FinalPage";
 import MyPage from "./pages/MyPage";
 import { getUser, clearUser } from "./auth";
+import { apiFetch } from "./api";
 
 function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const isHome = location.pathname === "/";
 
-  const [user, setUserState] = useState(getUser());
+  const [user, setUserState] = useState(null);
 
   // 다른 탭에서 로그아웃/로그인해도 동기화
   useEffect(() => {
-    const onStorage = () => setUserState(getUser());
+    const onStorage = () => {
+      apiFetch("/me")
+        .then((me) => {
+          setUserState({
+            ...me,
+            name: me.name ?? me.full_name ?? me.fullName ?? "사용자",
+          });
+        })
+        .catch(() => setUserState(null));
+    };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  // 페이지 이동할 때도 localStorage 기준으로 한 번 갱신
+  // 페이지 이동 시 로그인 사용자 정보 갱신 (/me 기준)
   useEffect(() => {
-    setUserState(getUser());
+    apiFetch("/me")
+      .then((me) => {
+        setUserState({
+          ...me,
+          name: me.name ?? me.full_name ?? me.fullName ?? "사용자",
+        });
+      })
+      .catch(() => setUserState(null));
   }, [location.pathname]);
 
   const handleLogout = () => {
@@ -49,7 +66,9 @@ function App() {
             <div className="app-nav-right">
               {user ? (
                 <>
-                  <span className="app-nav-greet">안녕하세요, {user.name}님</span>
+                  <span className="app-nav-greet">
+                    안녕하세요, {user.name}님
+                  </span>
                   <button type="button" className="app-nav-btn" onClick={handleLogout}>
                     로그아웃
                   </button>
@@ -81,7 +100,10 @@ function App() {
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/question" element={<QuestionPage />} />
         <Route path="/result" element={<ResultPage />} />
-        <Route path="/final" element={<FinalPage />} />
+
+        {/* ✅ 여기만 수정 */}
+        <Route path="/final/:policyId" element={<FinalPage />} />
+
         <Route path="/mypage" element={<MyPage />} />
       </Routes>
     </>

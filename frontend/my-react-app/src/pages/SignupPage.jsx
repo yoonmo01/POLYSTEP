@@ -10,11 +10,33 @@ function SignupPage() {
   const API_BASE_URL =
     import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
-  const registerRequest = async ({ email, password, full_name }) => {
+  const registerRequest = async ({
+    email,
+    password,
+    full_name,
+    age,
+    region,
+    is_student,
+    academic_status,
+    major,
+    grade,
+    gpa,
+  }) => {
     const res = await fetch(`${API_BASE_URL}/auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, full_name }),
+      body: JSON.stringify({
+        email,
+        password,
+        full_name,
+        age,
+        region,
+        is_student,
+        academic_status,
+        major,
+        grade,
+        gpa,
+      }),
     });
     const data = await res.json().catch(() => null);
     if (!res.ok) throw new Error(data?.detail || "회원가입에 실패했습니다.");
@@ -38,11 +60,20 @@ function SignupPage() {
     passwordConfirm: "",
     age: "",
     region: "",
+    is_student: false,
+    academic_status: "",
+    major: "",
+    grade: "",
+    gpa: "",
   });
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    if (e.target.type === "checkbox") {
+      setForm((prev) => ({ ...prev, [name]: e.target.checked }));
+    } else {
+      setForm((prev) => ({ ...prev, [name]: value }));
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -51,7 +82,21 @@ function SignupPage() {
       alert("비밀번호와 비밀번호 확인이 일치하지 않습니다.");
       return;
     }
-
+    // ✅ 숫자 변환(빈 문자열 방지)
+    const ageNum =
+      form.age === "" || form.age == null ? null : Number(form.age);
+    const gradeNum =
+      form.grade === "" || form.grade == null ? null : Number(form.grade);
+    const gpaNum =
+      form.gpa === "" || form.gpa == null ? null : Number(form.gpa);
+    if (ageNum == null || Number.isNaN(ageNum) || ageNum < 0) {
+      alert("나이를 올바르게 입력해 주세요.");
+      return;
+    }
+    if (!form.region?.trim()) {
+      alert("거주 지역을 입력해 주세요.");
+      return;
+    }
     if (isSubmitting) return;
     setIsSubmitting(true);
 
@@ -61,6 +106,13 @@ function SignupPage() {
         email: form.email,
         password: form.password,
         full_name: form.name,
+        age: ageNum,
+        region: form.region.trim(),
+        is_student: true,
+        academic_status: form.academic_status,
+        major: form.major,
+        grade: gradeNum,
+        gpa: gpaNum,
       });
 
       // 2) 자동 로그인 → 토큰 저장
@@ -74,8 +126,13 @@ function SignupPage() {
       setUser({
         name: form.name,
         email: form.email,
-        age: form.age,
-        region: form.region,
+        age: ageNum,
+        region: form.region.trim(),
+        is_student: form.is_student,
+        academic_status: form.academic_status,
+        major: form.major,
+        grade: form.grade,
+        gpa: form.gpa,
       });
 
       navigate("/");
@@ -178,6 +235,65 @@ function SignupPage() {
                   onChange={handleChange}
                   placeholder="예: 강원도 춘천시"
                   required
+                />
+              </div>
+              {/* 학적 상태 */}
+              <div className="auth-field">
+                <label htmlFor="academic_status">학적 상태</label>
+                <select
+                  id="academic_status"
+                  name="academic_status"
+                  value={form.academic_status}
+                  onChange={handleChange}
+                  required
+                >
+                  <option value="">선택</option>
+                  <option value="재학">재학</option>
+                  <option value="휴학">휴학</option>
+                  <option value="졸업예정">졸업예정</option>
+                  <option value="졸업">졸업</option>
+                </select>
+              </div>
+
+              <div className="auth-field">
+                <label htmlFor="major">전공</label>
+                <input
+                  id="major"
+                  name="major"
+                  type="text"
+                  value={form.major}
+                  onChange={handleChange}
+                  placeholder="예: 컴퓨터공학"
+                  required
+                />
+              </div>
+
+              <div className="auth-field">
+                <label htmlFor="grade">학년</label>
+                <input
+                  id="grade"
+                  name="grade"
+                  type="number"
+                  min="1"
+                  max="6"
+                  value={form.grade}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+
+              <div className="auth-field">
+                <label htmlFor="gpa">평균 평점</label>
+                <input
+                  id="gpa"
+                  name="gpa"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="4.5"
+                  value={form.gpa}
+                  onChange={handleChange}
+                  placeholder="예: 3.5"
                 />
               </div>
             </div>

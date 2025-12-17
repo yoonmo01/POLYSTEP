@@ -2,9 +2,8 @@
 from datetime import datetime
 from enum import Enum
 from typing import Any, List, Optional, Dict
-from typing import Optional
 from pydantic import BaseModel, EmailStr
-
+from typing import Literal
 
 # ===== Auth =====
 class Token(BaseModel):
@@ -23,11 +22,20 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     password: str
     full_name: Optional[str] = None
+    age: Optional[int] = None
+    region: Optional[str] = None
+    is_student: Optional[bool] = None
+    academic_status: Optional[str] = None
+    major: Optional[str] = None
+    grade: Optional[int] = None
+    gpa: Optional[float] = None
 
 
 class UserRead(UserBase):
     id: int
     full_name: Optional[str] = None
+    age: Optional[int] = None
+    region: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -88,6 +96,7 @@ class PolicySearchResult(BaseModel):
     apply_period_type: Optional[str] = None    # "상시모집" / "기간모집"
     biz_end: Optional[str] = None              # "YYYYMMDD" 문자열
 
+
 class SimilarPoliciesResponse(BaseModel):
     """
     기준 정책 하나 + 유사 정책들 5개 정도를 한 번에 내려주는 응답 스키마.
@@ -114,7 +123,6 @@ class PolicyVerificationResponse(BaseModel):
     navigation_path: Optional[List[Dict[str, Any]]] = None
     error_message: Optional[str] = None
 
-    # 🔥 ORM(PolicyVerification)에서 바로 변환 가능하게
     class Config:
         from_attributes = True
 
@@ -136,11 +144,11 @@ class PolicyDetailResponse(BaseModel):
     policy: PolicyRead
     verification: Optional[PolicyVerificationResponse] = None
 
+
 # ===== User Guide (B안: Deep Track facts + 사용자정보 → 최종 안내서) =====
 class UserGuideRequest(BaseModel):
     age: Optional[int] = None
     region: Optional[str] = None
-    # 필요하면 status(학생/취업/구직 등) 추가해도 됨
 
 
 class UserGuideResponse(BaseModel):
@@ -154,7 +162,8 @@ class UserGuideResponse(BaseModel):
     contact: Dict[str, Any] = {}
     missing_info: List[str] = []
     evidence_text: Optional[str] = None
-    
+
+
 class ScholarshipBase(BaseModel):
     name: str
     category: Optional[str] = None
@@ -187,8 +196,41 @@ class ScholarshipRead(ScholarshipBase):
         from_attributes = True
 
 
+class ScholarshipLLMCard(BaseModel):
+    one_liner: Optional[str] = None
+    benefit_summary: Optional[str] = None
+    eligibility_bullets: List[str] = []
+    retention_bullets: List[str] = []
+    notes_bullets: List[str] = []
+    gpa_min: Optional[float] = None
+    keywords: List[str] = []
+
+
+class ScholarshipRecommendItem(BaseModel):
+    id: int
+    name: str
+    category: Optional[str] = None
+    source_url: Optional[str] = None
+    selection_criteria: Optional[str] = None
+    retention_condition: Optional[str] = None
+    benefit: Optional[str] = None
+    llm_card: ScholarshipLLMCard
+    recommendation_reason: Optional[str] = None
+
+    user_fit: Literal["PASS", "WARNING", "FAIL"] = "WARNING"
+    user_fit_reason: Optional[str] = None
+    missing_info: List[str] = []
+
+    class Config:
+        from_attributes = True
+
+
+class ScholarshipRecommendResponse(BaseModel):
+    items: List[ScholarshipRecommendItem] = []
+
+
 class ScholarshipSearchRequest(BaseModel):
-    query: Optional[str] = None       # name/criteria/condition/benefit 부분검색
+    query: Optional[str] = None
     category: Optional[str] = None
     limit: int = 50
     offset: int = 0
@@ -208,3 +250,78 @@ class ScholarshipCommonRuleRead(BaseModel):
 class ScholarshipBundleResponse(BaseModel):
     scholarships: List[ScholarshipRead]
     common_rules: List[ScholarshipCommonRuleRead]
+
+
+class MeResponse(BaseModel):
+    id: int
+    email: EmailStr
+    name: Optional[str] = None
+    age: Optional[int] = None
+    region: Optional[str] = None
+    is_student: Optional[bool] = None
+    academic_status: Optional[str] = None
+    major: Optional[str] = None
+    grade: Optional[int] = None
+    gpa: Optional[float] = None
+    created_at: datetime | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class RecommendationItemIn(BaseModel):
+    policy_id: int
+    badge_status: Optional[BadgeStatus] = None
+    score: Optional[float] = None
+
+
+class RecommendationCreateRequest(BaseModel):
+    conditions: Optional[Dict[str, Any]] = None
+    results: List[RecommendationItemIn]
+    scholarships: List[Dict[str, Any]] = []
+
+
+class RecommendationItemOut(BaseModel):
+    policy_id: int
+    title: str
+    category: Optional[str] = None
+    category_l: Optional[str] = None
+    category_m: Optional[str] = None
+    region: Optional[str] = None
+    badge_status: Optional[BadgeStatus] = None
+    score: Optional[float] = None
+
+
+# ✅ created_at을 "KST offset 포함 ISO 문자열"로 내려주기 위해 str로 변경
+class RecommendationSessionResponse(BaseModel):
+    created_at: str | None = None
+    conditions: Optional[Dict[str, Any]] = None
+    items: List[RecommendationItemOut] = []
+    scholarships: List[Dict[str, Any]] = []
+
+
+class RecommendationSessionsResponse(BaseModel):
+    sessions: List[RecommendationSessionResponse] = []
+
+
+class ViewCreateRequest(BaseModel):
+    policy_id: int
+    verification_id: Optional[int] = None
+    scholarship: Optional[Dict[str, Any]] = None
+
+
+# ✅ viewed_at도 마찬가지로 offset 포함 문자열로 내려주면 프론트 표시가 안정적
+class ViewItemOut(BaseModel):
+    policy_id: int
+    title: str
+    category: Optional[str] = None
+    category_l: Optional[str] = None
+    category_m: Optional[str] = None
+    region: Optional[str] = None
+    viewed_at: str | None = None
+    verification_status: Optional[PolicyVerificationStatusEnum] = None
+    scholarship: Optional[Dict[str, Any]] = None
+
+
+class ViewListResponse(BaseModel):
+    items: List[ViewItemOut] = []

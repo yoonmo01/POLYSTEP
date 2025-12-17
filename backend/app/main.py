@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import auth, policies, scholarships
+from app.routers import auth, policies, scholarships, me
 
 # ✅ 여기 추가
 from app.db import Base, engine
@@ -40,7 +40,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router, prefix="/auth", tags=["auth"])
     app.include_router(policies.router, prefix="/policies", tags=["Policies"])
     app.include_router(scholarships.router, prefix="/scholarships", tags=["Scholarships"])
-
+    app.include_router(me.router, prefix="/me", tags=["me"])
     return app
 
 
