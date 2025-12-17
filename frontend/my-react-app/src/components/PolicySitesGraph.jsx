@@ -31,6 +31,174 @@ const DEFAULT_SITE_CATALOG = [
       "정부 서비스·지원 정책을 한 곳에서 검색하고 신청/민원 안내까지 확인할 수 있는 통합 포털이에요.",
     kind: "site",
   },
+  {
+    id: "seoul_scholarship",
+    label: "서울장학재단",
+    url: "https://www.hissf.or.kr/",
+    summary:
+      "서울 시민과 학생들을 위한 다양한 장학금 지원 및 인재 양성 프로그램을 운영하는 재단입니다.",
+    kind: "site",
+  },
+  {
+    id: "work24",
+    label: "고용24",
+    url: "https://www.work24.go.kr/",
+    summary:
+      "청년 일자리, 내일배움카드, 국민취업지원제도 등 취업 준비부터 역량 강화까지 필요한 모든 고용 서비스를 한 번에 해결할 수 있어요.",
+    kind: "site",
+  },
+  {
+    id: "dreamspon",
+    label: "드림스폰",
+    url: "https://www.dreamspon.com/",
+    summary:
+      "전국 대학생 장학금, 대외활동, 공모전 정보를 한눈에 볼 수 있는 장학금 통합 포털입니다.",
+    kind: "site",
+  },
+  {
+    id: "samsung_dream",
+    label: "삼성꿈장학재단",
+    url: "https://www.sdream.or.kr/",
+    summary:
+      "다양한 교육 소외계층 학생들에게 장학금과 멘토링 프로그램을 지원하는 국내 최대 규모 민간 장학재단입니다.",
+    kind: "site",
+  },
+  {
+    id: "bokjiro",
+    label: "복지로",
+    url: "https://www.bokjiro.go.kr/",
+    summary:
+      "대한민국 대표 복지포털로, 청년 주거급여, 청년월세지원 등 나에게 필요한 모든 복지 서비스를 찾고 신청할 수 있습니다.",
+    kind: "site",
+  },
+  {
+    id: "gw_youth",
+    label: "강원청년포털",
+    url: "https://job.gwd.go.kr/",
+    summary:
+      "강원특별자치도 청년들을 위한 일자리, 주거, 복지, 문화 등 분야별 맞춤형 청년 정책 정보를 통합 제공합니다.",
+    kind: "site",
+  },
+  {
+    id: "seoul_youth",
+    label: "청년몽땅정보통",
+    url: "https://youth.seoul.go.kr/",
+    summary:
+      "서울시 청년 정책의 모든 것. 청년수당, 대중교통비 지원, 역세권 청년주택 등 서울 청년을 위한 정보를 한곳에 모았습니다.",
+    kind: "site",
+  },
+  {
+    id: "k_startup",
+    label: "K-Startup",
+    url: "https://www.k-startup.go.kr/",
+    summary:
+      "예비창업패키지, 초기창업패키지 등 청년 창업가를 위한 정부 지원 사업과 교육, 공간 정보를 총망라한 창업 지원 포털입니다.",
+    kind: "site",
+  },
+  {
+    id: "gg_youth",
+    label: "잡아바(경기)",
+    url: "https://www.jobaba.net/",
+    summary:
+      "경기도 일자리재단이 운영하는 통합 플랫폼으로, 청년기본소득, 면접수당 등 경기도 청년 맞춤형 정책을 신청할 수 있습니다.",
+    kind: "site",
+  },
+  {
+    id: "busan_youth",
+    label: "부산청년플랫폼",
+    url: "https://www.busan.go.kr/young",
+    summary:
+      "부산 청년들을 위한 일자리, 주거, 문화, 복지 정책 정보를 제공하고 '청년디딤돌카드' 등 주요 사업 신청을 받습니다.",
+    kind: "site",
+  },
+  {
+    id: "incheon_youth",
+    label: "인천유스톡톡",
+    url: "https://www.chungbuk.go.kr/young",
+    summary:
+      "인천 청년들을 위한 취/창업 지원, 모임 공간 대관, 역량 강화 프로그램 등 다양한 청년 활동 지원 정보를 제공합니다.",
+    kind: "site",
+  },
+  {
+    id: "gwangju_youth",
+    label: "광주청년드림",
+    url: "https://youth.gwangju.go.kr/",
+    summary:
+      "광주 청년들의 구직 활동 수당, 청년 저축 계좌 등 자립과 성장을 돕는 맞춤형 청년 정책을 소개합니다.",
+    kind: "site",
+  },
+  {
+    id: "daejeon_youth",
+    label: "대전청년포털",
+    url: "https://www.daejeonyouthportal.kr/",
+    summary:
+      "대전 청년 취업 희망 카드, 주택 임차 보증금 이자 지원 등 대전시의 핵심 청년 지원 사업을 안내합니다.",
+    kind: "site",
+  },
+  {
+    id: "ulsan_youth",
+    label: "울산청년정책플랫폼",
+    url: "https://www.ulsan.go.kr/s/ulsanyouth/main.ulsan",
+    summary:
+      "울산 청년들을 위한 일자리, 주거, 복지 정책 정보와 'U-Dream' 등 지역 특화 청년 지원 사업을 확인할 수 있습니다.",
+    kind: "site",
+  },
+  {
+    id: "sejong_youth",
+    label: "세종청년플랫폼",
+    url: "https://www2.sejong.go.kr/youth/",
+    summary:
+      "세종시 청년들을 위한 정책, 공간, 문화 활동 정보를 통합 제공하며 청년 간의 소통을 지원하는 플랫폼입니다.",
+    kind: "site",
+  },
+  {
+    id: "jeju_youth",
+    label: "제주청년센터",
+    url: "https://jejuyouth.com/",
+    summary:
+      "제주 청년들의 역량 강화, 커뮤니티 활동, 취/창업 상담 등 제주 지역 청년 활동의 거점 역할을 하는 온라인 플랫폼입니다.",
+    kind: "site",
+  },
+  {
+    id: "cb_youth",
+    label: "충북청년포털",
+    url: "https://www.chungbuk.go.kr/young",
+    summary:
+      "충청북도 청년들을 위한 행복 결혼 공제, 학자금 대출 이자 지원 등 지역 맞춤형 청년 복지 정보를 제공합니다.",
+    kind: "site",
+  },
+  {
+    id: "cn_youth",
+    label: "충남청년포털",
+    url: "https://youth.chungnam.go.kr/",
+    summary:
+      "충청남도 청년들이 일자리·주거·복지·문화·정신건강 등 각종 청년 지원정책과 사업 정보를 한 번에 찾고 신청할 수 있는 종합 정보 사이트입니다.",
+    kind: "site",
+  },
+  {
+    id: "jb_youth",
+    label: "전북청년허브",
+    url: "https://www.jb2030.or.kr/",
+    summary:
+      "전라북도 청년 정책 통합 검색, 청년 공간 안내, 동아리 지원 등 전북 청년들의 활발한 활동을 지원합니다.",
+    kind: "site",
+  },
+  {
+    id: "gn_youth",
+    label: "경남청년정보플랫폼",
+    url: "https://youth.gyeongnam.go.kr/",
+    summary:
+      "경상남도 청년들을 위한 맞춤형 정책 검색 서비스와 청년 패스, 면접 정장 대여 등 실질적인 지원 혜택을 안내합니다.",
+    kind: "site",
+  },
+  {
+    id: "myhome",
+    label: "마이홈포털",
+    url: "https://www.myhome.go.kr/",
+    summary:
+      "국토교통부 주거 복지 포털로, 청년·신혼부부를 위한 주택 공급, 전·월세금 및 주거비 지원 등 각종 주거복지 정책을 한곳에서 조회하고 자가진단까지 할 수 있는 통합 안내 사이트입니다.",
+    kind: "site",
+  }
 ];
 
 function clamp(value, min, max) {
@@ -80,7 +248,7 @@ function computeClampedCenterToKeepBboxInView(fg, width, height, paddingPx) {
   const curX = isFiniteNumber(curCenter?.x) ? curCenter.x : 0;
   const curY = isFiniteNumber(curCenter?.y) ? curCenter.y : 0;
 
-  // bbox가 뷰포트보다 크면(모두를 한 화면에 못 넣으면) bbox 중심으로 맞춥니다.
+  // bbox가 뷰포트보다 크면 bbox 중심으로.
   const viewportW = Math.max(0, halfW - padGX);
   const viewportH = Math.max(0, halfH - padGY);
 
@@ -150,13 +318,11 @@ function runBoundaryBounce({
 
 export default function PolicySitesGraph({
   sites = DEFAULT_SITE_CATALOG,
-  // 노드 간격을 넓히면 전체 bbox가 커져 초기 fit이 더 큰 줌아웃을 필요로 합니다.
-  // 그래서 minZoom을 너무 높게 잡지 않습니다(노드가 잘리는 문제 방지).
   minZoom = 0.35,
   maxZoom = 2.2,
 }) {
-  const containerRef = useRef(null); // React가 관리하는 래퍼(툴팁 포함)
-  const stageRef = useRef(null); // force-graph가 캔버스를 붙이는 전용 컨테이너(React 자식 없음)
+  const containerRef = useRef(null); // React가 관리하는 래퍼
+  const stageRef = useRef(null); // force-graph가 캔버스를 붙이는 전용 컨테이너
   const fgRef = useRef(null); // force-graph instance
   const timersRef = useRef({
     releaseFx: null,
@@ -248,16 +414,15 @@ export default function PolicySitesGraph({
   }, []);
 
   // force-graph 인스턴스는 "마운트 시 1회 생성/언마운트 시 1회 정리"로 유지합니다.
-  // React 자식(툴팁 등)과 캔버스 DOM이 섞이면 removeChild 충돌이 날 수 있어 stageRef로 분리합니다.
   useEffect(() => {
     if (!stageRef.current) return;
 
     const fg = ForceGraph()(stageRef.current)
       .backgroundColor("rgba(0,0,0,0)")
       .enableNodeDrag(true)
-      // 기본 pan 사용(일반적인 '잡고 끌기' 느낌). 카메라 느낌(역방향) 제거.
+      // 기본 pan 사용(일반적인 '잡고 끌기' 느낌)
       .enablePanInteraction(true)
-      // 확대/축소(휠/트랙패드/핀치) 인터랙션 비활성화: 공간(스케일) 고정
+      // 화면 고정
       .enableZoomInteraction(false);
 
     fgRef.current = fg;
@@ -438,7 +603,7 @@ export default function PolicySitesGraph({
         }
 
         // Drop Shadow (Elevation)
-        // iOS: 부드럽고 넓게 퍼지는 그림자로 깊이감 표현
+        // 부드럽고 넓게 퍼지는 그림자로 깊이감 표현
         ctx.shadowBlur = isHovered ? 16 : 8;
         ctx.shadowOffsetY = isHovered ? 6 : 3;
 
