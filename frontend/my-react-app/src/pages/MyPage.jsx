@@ -55,6 +55,22 @@ function MyPage() {
     }
   };
 
+  /**
+   * ✅ MyPage에서 "이 묶음 결과보기"를 눌렀을 때만
+   * ResultPage로 '선택한 세션/배치' 정보를 state로 전달.
+   */
+  const goResultWithSession = (e, sess) => {
+    e?.preventDefault?.(); // details/summary 토글 방지
+    e?.stopPropagation?.();
+    navigate("/result", { state: { from: "mypage", mode: "session", session: sess } });
+  };
+
+  const goResultWithBatch = (e, batch) => {
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
+    navigate("/result", { state: { from: "mypage", mode: "batch", batch } });
+  };
+
   // ✅ 응답 형태가 달라도 sessions 배열로 정규화
   const normalizeSessions = (hist) => {
     if (Array.isArray(hist?.sessions)) return hist.sessions;
@@ -74,22 +90,18 @@ function MyPage() {
   };
 
   /**
-   * ✅ 핵심 수정:
-   * "세션의 장학금 전부"를 가져오기
+   * ✅ "세션의 장학금 전부"를 가져오기
    * - sess.scholarships 가 정석
    * - 예외: sess.scholarship (단일) / items[].scholarship
    */
   const getScholarshipsFromSession = (sess) => {
     if (!sess) return [];
 
-    // 1) { scholarships: [...] }
     if (Array.isArray(sess.scholarships)) return sess.scholarships.filter(Boolean);
 
-    // 2) { scholarship: {...} }
     if (sess.scholarship && typeof sess.scholarship === "object")
       return [sess.scholarship];
 
-    // 3) { items: [{ scholarship: {...} }, ...] }
     if (Array.isArray(sess.items)) {
       const arr = sess.items.map((x) => x?.scholarship).filter(Boolean);
       return arr;
@@ -190,10 +202,7 @@ function MyPage() {
         <div className="mypage-shell">
           <div className="mypage-card">
             <p style={{ color: "#fca5a5", fontWeight: 800 }}>{error}</p>
-            <button
-              className="mypage-primary-btn"
-              onClick={() => navigate("/login")}
-            >
+            <button className="mypage-primary-btn" onClick={() => navigate("/login")}>
               로그인으로
             </button>
           </div>
@@ -213,269 +222,9 @@ function MyPage() {
           </p>
         </header>
 
-        {/* 상단 2열 카드: 프로필 + 최근 추천 */}
+        {/* ✅ 상단 2열: (왼쪽) 최근 열람 + (오른쪽) 최근 추천 */}
         <section className="mypage-top-grid">
-          {/* 프로필 */}
-          <div className="mypage-card profile-card-compact">
-            <div className="mypage-card-head">
-              <h2>내 프로필</h2>
-            </div>
-
-            <div className="profile-compact">
-              <div className="profile-avatar" aria-hidden>
-                {String(displayName).slice(0, 1)}
-              </div>
-
-              <div className="profile-compact-main">
-                <div className="profile-name-row">
-                  <div className="profile-name">{displayName}</div>
-                  <div className="profile-email">{fmtMaybe(profile?.email)}</div>
-                </div>
-
-                <div className="profile-chips">
-                  <span className="profile-chip">
-                    나이: {profile?.age ? `${profile.age}세` : "-"}
-                  </span>
-                  <span className="profile-chip">
-                    거주: {profile?.region ? profile.region : "미설정"}
-                  </span>
-                  <span className="profile-chip">
-                    학생 여부:{" "}
-                    {profile?.is_student === true
-                      ? "예"
-                      : profile?.is_student === false
-                      ? "아니오"
-                      : "-"}
-                  </span>
-                  <span className="profile-chip">전공: {fmtMaybe(profile?.major)}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* ✅ 오른쪽 위: 최근 추천 받은 정책 및 장학금 */}
-          <div className="mypage-card recent-card">
-            <div className="mypage-card-head">
-              <h2>최근 추천 받은 정책 및 장학금</h2>
-              <button
-                type="button"
-                className="small-link-btn"
-                onClick={() => navigate("/result")}
-              >
-                결과 보기 →
-              </button>
-            </div>
-
-            {hasApiSessions ? (
-              <div className="recent-scroll">
-                {recommendationSessions.map((sess, idx) => {
-                  const createdAt = sess?.created_at || sess?.createdAt || "";
-                  const items = Array.isArray(sess?.items) ? sess.items : [];
-
-                  // ✅ 장학금 "전부"
-                  const scholarships = getScholarshipsFromSession(sess);
-                  const schCount = scholarships.length;
-
-                  return (
-                    <details
-                      key={`sess-${createdAt || "t"}-${idx}`}
-                      className="recent-details"
-                      open={idx === 0}
-                    >
-                      <summary className="recent-summary">
-                        <div className="recent-summary-col">
-                          <div className="recent-summary-time">
-                            {fmtTime(createdAt)
-                              ? `🕒 ${fmtTime(createdAt)}`
-                              : "🕒 추천 기록"}
-                          </div>
-                          <div className="recent-summary-sub">
-                            🎓 장학금 {schCount}개{" "}
-                            {items.length ? `· 정책 ${items.length}개` : ""}
-                          </div>
-                        </div>
-                      </summary>
-
-                      <div className="recent-details-body">
-                        {/* ✅ 장학금 리스트 */}
-                        {schCount > 0 ? (
-                          <ul className="recent-list" style={{ margin: 0 }}>
-                            {scholarships.map((s, sIdx) => (
-                              <li
-                                key={`sch-${s?.id ?? sIdx}-${createdAt || "t"}`}
-                                className="recent-item"
-                              >
-                                <div className="recent-main">
-                                  <p className="recent-title">
-                                    🎓 {s?.name || "장학금"}
-                                  </p>
-                                  <p className="recent-meta">
-                                    {s?.category ? `유형: ${s.category}` : "-"}
-                                    {s?.user_fit ? ` · 적합도: ${s.user_fit}` : ""}
-                                  </p>
-                                </div>
-                                <span className="recent-status status-recommend">추천</span>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <div className="empty-block">추천 장학금이 없습니다.</div>
-                        )}
-
-                        {/* 정책 리스트 */}
-                        {items.length > 0 ? (
-                          <ul className="recent-list" style={{ margin: 0 }}>
-                            {items.map((p, pIdx) => (
-                              <li
-                                key={`${p.policy_id ?? pIdx}-${createdAt || "t"}`}
-                                className="recent-item"
-                              >
-                                <div className="recent-main">
-                                  <p className="recent-title">
-                                    {p.title || "(정책명 없음)"}
-                                  </p>
-                                  <p className="recent-meta">
-                                    <span className="recent-region">
-                                      📍 {p.region || "-"}
-                                    </span>
-                                    <span>·</span>
-                                    <span className="recent-category">
-                                      {p.category_l || "-"}
-                                      {p.category_m ? ` / ${p.category_m}` : ""}
-                                    </span>
-                                  </p>
-                                </div>
-
-                                <span
-                                  className={
-                                    "recent-status " +
-                                    statusClass(p.badge_status || "RECOMMEND")
-                                  }
-                                  title={p.badge_status || "추천"}
-                                >
-                                  {p.badge_status || "추천"}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <div className="empty-block">이 추천 기록에 정책이 없습니다.</div>
-                        )}
-                      </div>
-                    </details>
-                  );
-                })}
-              </div>
-            ) : recentResultBatchesFallback.length > 0 ? (
-              <div className="recent-scroll">
-                {recentResultBatchesFallback.map((batch, bIdx) => {
-                  const policies = Array.isArray(batch?.policies) ? batch.policies : [];
-                  const scholarships = getScholarshipsFromBatch(batch);
-                  const schCount = scholarships.length;
-                  const createdAt = batch?.created_at || batch?.createdAt || "";
-
-                  return (
-                    <details
-                      key={`batch-${createdAt || "t"}-${bIdx}`}
-                      className="recent-details"
-                      open={bIdx === 0}
-                    >
-                      <summary className="recent-summary">
-                        <div className="recent-summary-col">
-                          <div className="recent-summary-time">
-                            {fmtTime(createdAt)
-                              ? `🕒 ${fmtTime(createdAt)}`
-                              : "🕒 추천 기록"}
-                          </div>
-                          <div className="recent-summary-sub">
-                            🎓 장학금 {schCount}개{" "}
-                            {policies.length ? `· 정책 ${policies.length}개` : ""}
-                          </div>
-                        </div>
-                      </summary>
-
-                      <div className="recent-details-body">
-                        {/* ✅ fallback 장학금 리스트 */}
-                        {schCount > 0 ? (
-                          <ul className="recent-list" style={{ margin: 0 }}>
-                            {scholarships.map((s, sIdx) => (
-                              <li
-                                key={`batch-sch-${s?.id ?? sIdx}-${createdAt || "t"}`}
-                                className="recent-item"
-                              >
-                                <div className="recent-main">
-                                  <p className="recent-title">
-                                    🎓 {s?.name || "장학금"}
-                                  </p>
-                                  <p className="recent-meta">
-                                    {s?.category ? `유형: ${s.category}` : "-"}
-                                    {s?.user_fit ? ` · 적합도: ${s.user_fit}` : ""}
-                                  </p>
-                                </div>
-                                <span className="recent-status status-recommend">추천</span>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <div className="empty-block">추천 장학금이 없습니다.</div>
-                        )}
-
-                        {policies.length > 0 ? (
-                          <ul className="recent-list" style={{ margin: 0 }}>
-                            {policies.map((p, idx2) => (
-                              <li
-                                key={`${p.id ?? p.policy_id ?? idx2}`}
-                                className="recent-item"
-                              >
-                                <div className="recent-main">
-                                  <p className="recent-title">
-                                    {p.title || "(정책명 없음)"}
-                                  </p>
-                                  <p className="recent-meta">
-                                    <span className="recent-region">
-                                      📍 {p.region || "-"}
-                                    </span>
-                                    <span>·</span>
-                                    <span className="recent-category">
-                                      {p.category_l || "-"}
-                                      {p.category_m ? ` / ${p.category_m}` : ""}
-                                    </span>
-                                  </p>
-                                </div>
-
-                                <span
-                                  className={
-                                    "recent-status " +
-                                    statusClass(p.badge_status || "RECOMMEND")
-                                  }
-                                  title={p.badge_status || "추천"}
-                                >
-                                  {p.badge_status || "추천"}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <div className="empty-block">이 추천 묶음에 정책이 없습니다.</div>
-                        )}
-                      </div>
-                    </details>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="empty-block">
-                아직 추천받은 기록이 없어요.
-                <br />
-                Question → Result에서 추천을 먼저 받아보세요.
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* 하단: 최근 열람(검증) + CTA */}
-        <section className="mypage-bottom">
-          {/* ✅ 왼쪽 아래: 최근에 살펴본 정책 및 장학금 */}
+          {/* ✅ 왼쪽 위: 최근에 살펴본 정책 및 장학금 */}
           <div className="mypage-card history-card">
             <div className="mypage-card-head">
               <h2>최근에 살펴본 정책 및 장학금</h2>
@@ -586,6 +335,254 @@ function MyPage() {
                 Result에서 정책을 선택해 Final로 들어가보면 여기에 쌓여요.
               </div>
             )}
+          </div>
+
+          {/* ✅ 오른쪽 위: 최근 추천 받은 정책 및 장학금 */}
+          <div className="mypage-card recent-card">
+            <div className="mypage-card-head">
+              <h2>최근 추천 받은 정책 및 장학금</h2>
+            </div>
+
+            {hasApiSessions ? (
+              <div className="recent-scroll">
+                {recommendationSessions.map((sess, idx) => {
+                  const createdAt = sess?.created_at || sess?.createdAt || "";
+                  const items = Array.isArray(sess?.items) ? sess.items : [];
+
+                  const scholarships = getScholarshipsFromSession(sess);
+                  const schCount = scholarships.length;
+
+                  return (
+                    <details
+                      key={`sess-${createdAt || "t"}-${idx}`}
+                      className="recent-details"
+                      open={idx === 0}
+                    >
+                      <summary className="recent-summary">
+                        <div className="recent-summary-col">
+                          <div className="recent-summary-time">
+                            {fmtTime(createdAt) ? `🕒 ${fmtTime(createdAt)}` : "🕒 추천 기록"}
+                          </div>
+                          <div className="recent-summary-sub">
+                            🎓 장학금 {schCount}개 {items.length ? `· 정책 ${items.length}개` : ""}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="small-link-btn"
+                          onClick={(e) => goResultWithSession(e, sess)}
+                          title="이 추천 묶음 결과 보기"
+                        >
+                          이 결과 보기 →
+                        </button>
+                      </summary>
+
+                      <div className="recent-details-body">
+                        {schCount > 0 ? (
+                          <ul className="recent-list" style={{ margin: 0 }}>
+                            {scholarships.map((s, sIdx) => (
+                              <li
+                                key={`sch-${s?.id ?? sIdx}-${createdAt || "t"}`}
+                                className="recent-item"
+                              >
+                                <div className="recent-main">
+                                  <p className="recent-title">🎓 {s?.name || "장학금"}</p>
+                                  <p className="recent-meta">
+                                    {s?.category ? `유형: ${s.category}` : "-"}
+                                    {s?.user_fit ? ` · 적합도: ${s.user_fit}` : ""}
+                                  </p>
+                                </div>
+                                <span className="recent-status status-recommend">추천</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <div className="empty-block">추천 장학금이 없습니다.</div>
+                        )}
+
+                        {items.length > 0 ? (
+                          <ul className="recent-list" style={{ margin: 0 }}>
+                            {items.map((p, pIdx) => (
+                              <li
+                                key={`${p.policy_id ?? pIdx}-${createdAt || "t"}`}
+                                className="recent-item"
+                              >
+                                <div className="recent-main">
+                                  <p className="recent-title">{p.title || "(정책명 없음)"}</p>
+                                  <p className="recent-meta">
+                                    <span className="recent-region">📍 {p.region || "-"}</span>
+                                    <span>·</span>
+                                    <span className="recent-category">
+                                      {p.category_l || "-"}
+                                      {p.category_m ? ` / ${p.category_m}` : ""}
+                                    </span>
+                                  </p>
+                                </div>
+
+                                <span
+                                  className={
+                                    "recent-status " + statusClass(p.badge_status || "RECOMMEND")
+                                  }
+                                  title={p.badge_status || "추천"}
+                                >
+                                  {p.badge_status || "추천"}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <div className="empty-block">이 추천 기록에 정책이 없습니다.</div>
+                        )}
+                      </div>
+                    </details>
+                  );
+                })}
+              </div>
+            ) : recentResultBatchesFallback.length > 0 ? (
+              <div className="recent-scroll">
+                {recentResultBatchesFallback.map((batch, bIdx) => {
+                  const policies = Array.isArray(batch?.policies) ? batch.policies : [];
+                  const scholarships = getScholarshipsFromBatch(batch);
+                  const schCount = scholarships.length;
+                  const createdAt = batch?.created_at || batch?.createdAt || "";
+
+                  return (
+                    <details
+                      key={`batch-${createdAt || "t"}-${bIdx}`}
+                      className="recent-details"
+                      open={bIdx === 0}
+                    >
+                      <summary className="recent-summary">
+                        <div className="recent-summary-col">
+                          <div className="recent-summary-time">
+                            {fmtTime(createdAt) ? `🕒 ${fmtTime(createdAt)}` : "🕒 추천 기록"}
+                          </div>
+                          <div className="recent-summary-sub">
+                            🎓 장학금 {schCount}개{" "}
+                            {policies.length ? `· 정책 ${policies.length}개` : ""}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="small-link-btn"
+                          onClick={(e) => goResultWithBatch(e, batch)}
+                          title="이 추천 묶음 결과 보기"
+                        >
+                          이 결과 보기 →
+                        </button>
+                      </summary>
+
+                      <div className="recent-details-body">
+                        {schCount > 0 ? (
+                          <ul className="recent-list" style={{ margin: 0 }}>
+                            {scholarships.map((s, sIdx) => (
+                              <li
+                                key={`batch-sch-${s?.id ?? sIdx}-${createdAt || "t"}`}
+                                className="recent-item"
+                              >
+                                <div className="recent-main">
+                                  <p className="recent-title">🎓 {s?.name || "장학금"}</p>
+                                  <p className="recent-meta">
+                                    {s?.category ? `유형: ${s.category}` : "-"}
+                                    {s?.user_fit ? ` · 적합도: ${s.user_fit}` : ""}
+                                  </p>
+                                </div>
+                                <span className="recent-status status-recommend">추천</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <div className="empty-block">추천 장학금이 없습니다.</div>
+                        )}
+
+                        {policies.length > 0 ? (
+                          <ul className="recent-list" style={{ margin: 0 }}>
+                            {policies.map((p, idx2) => (
+                              <li
+                                key={`${p.id ?? p.policy_id ?? idx2}`}
+                                className="recent-item"
+                              >
+                                <div className="recent-main">
+                                  <p className="recent-title">{p.title || "(정책명 없음)"}</p>
+                                  <p className="recent-meta">
+                                    <span className="recent-region">📍 {p.region || "-"}</span>
+                                    <span>·</span>
+                                    <span className="recent-category">
+                                      {p.category_l || "-"}
+                                      {p.category_m ? ` / ${p.category_m}` : ""}
+                                    </span>
+                                  </p>
+                                </div>
+
+                                <span
+                                  className={
+                                    "recent-status " + statusClass(p.badge_status || "RECOMMEND")
+                                  }
+                                  title={p.badge_status || "추천"}
+                                >
+                                  {p.badge_status || "추천"}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <div className="empty-block">이 추천 묶음에 정책이 없습니다.</div>
+                        )}
+                      </div>
+                    </details>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="empty-block">
+                아직 추천받은 기록이 없어요.
+                <br />
+                Question → Result에서 추천을 먼저 받아보세요.
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* ✅ 하단 2열: (왼쪽) 내 프로필 + (오른쪽) CTA */}
+        <section className="mypage-bottom">
+          {/* ✅ 왼쪽 아래: 내 프로필 */}
+          <div className="mypage-card profile-card-compact">
+            <div className="mypage-card-head">
+              <h2>내 프로필</h2>
+            </div>
+
+            <div className="profile-compact">
+              <div className="profile-avatar" aria-hidden>
+                {String(displayName).slice(0, 1)}
+              </div>
+
+              <div className="profile-compact-main">
+                <div className="profile-name-row">
+                  <div className="profile-name">{displayName}</div>
+                  <div className="profile-email">{fmtMaybe(profile?.email)}</div>
+                </div>
+
+                <div className="profile-chips">
+                  <span className="profile-chip">
+                    나이: {profile?.age ? `${profile.age}세` : "-"}
+                  </span>
+                  <span className="profile-chip">
+                    거주: {profile?.region ? profile.region : "미설정"}
+                  </span>
+                  <span className="profile-chip">
+                    학생 여부:{" "}
+                    {profile?.is_student === true
+                      ? "예"
+                      : profile?.is_student === false
+                      ? "아니오"
+                      : "-"}
+                  </span>
+                  <span className="profile-chip">전공: {fmtMaybe(profile?.major)}</span>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* CTA */}

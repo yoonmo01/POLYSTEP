@@ -297,6 +297,8 @@
   border-color: rgba(245,158,11,0.7);
   background: rgba(245,158,11,0.15);
   color: #fde68a;
+  width: 70px;      /* ✅ WARNING만 넓혀서 삐져나옴 방지 */
+  font-size: 0.68rem; /* (선택) 글자 살짝 줄이면 더 안정적 */
 }
 
 .recent-status.status-fail {
@@ -559,4 +561,24 @@
   .only-mobile {
     display: inline;
   }
+}
+/* ✅ summary 한 줄에서: 왼쪽(시간/개수) + 오른쪽(버튼) */
+.recent-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 왼쪽 텍스트 영역 줄바꿈/넘침 대응 */
+.recent-summary-col {
+  min-width: 0;
+}
+
+/* ✅ 오른쪽 액션 영역 */
+.recent-summary-actions {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
 }

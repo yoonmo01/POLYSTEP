@@ -1,4 +1,3 @@
-//frontend/my-react-app/src/pages/Homepage.jsx
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import heroBg from "../assets/HomePage_BackGround.jpg";
@@ -29,6 +28,17 @@ const HomePage = () => {
     navigate("/");
   };
 
+  // ✅ 로그인 필요 페이지 진입 가드
+  const goQuestion = (e) => {
+    e.preventDefault();
+    if (!user) {
+      // 원하면 로그인 후 돌아오게 state로 from도 넘길 수 있음
+      navigate("/login", { state: { from: "/question" } });
+      return;
+    }
+    navigate("/question");
+  };
+
   return (
     <div
       className="home"
@@ -56,9 +66,7 @@ const HomePage = () => {
             </>
           ) : (
             <>
-              <Link to="/mypage" className="nav-link">
-                마이페이지
-              </Link>
+              {/* ✅ 로그인 안 했으면 홈에서 마이페이지 링크 숨김 */}
               <Link to="/login" className="nav-link">
                 로그인
               </Link>
@@ -85,12 +93,10 @@ const HomePage = () => {
           </p>
 
           <div className="home-actions">
-            <Link to="/question" className="btn btn-primary">
+            {/* ✅ 로그인 안 했으면 /question 못 들어가고 /login으로 이동 */}
+            <Link to="/question" className="btn btn-primary" onClick={goQuestion}>
               나에게 맞는 정책 찾기
             </Link>
-            {/* <Link to="/about" className="btn btn-ghost">
-              서비스 소개 보기
-            </Link> */}
           </div>
 
           <div className="home-badges">

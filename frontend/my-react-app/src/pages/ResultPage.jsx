@@ -1,4 +1,3 @@
-//frontend/my-react-app/src/pages/ResultPage.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { apiFetch } from "../api";
@@ -97,18 +96,66 @@ function ResultPage() {
   const location = useLocation();
 
   const [me, setMe] = useState(null);
-  const conditions = location.state?.conditions || null;
 
-  const incomingResults = Array.isArray(location.state?.results)
-    ? location.state.results
-    : [];
-  const incomingScholarships = Array.isArray(location.state?.scholarships)
-    ? location.state.scholarships
-    : [];
+  // ✅ ResultPage 진입 state 정규화 (QuestionPage / MyPage 둘 다 대응)
+  const incoming = useMemo(() => {
+    const st = location.state || {};
+
+    // ✅ MyPage에서 넘어온 경우
+    if (st?.from === "mypage" && st?.mode) {
+      if (st.mode === "session" && st.session) {
+        const sess = st.session;
+        const items = Array.isArray(sess?.items) ? sess.items : [];
+        const scholarships = Array.isArray(sess?.scholarships)
+          ? sess.scholarships.filter(Boolean)
+          : sess?.scholarship && typeof sess.scholarship === "object"
+          ? [sess.scholarship]
+          : Array.isArray(sess?.items)
+          ? sess.items.map((x) => x?.scholarship).filter(Boolean)
+          : [];
+
+        return {
+          conditions: sess?.conditions || null,
+          results: items,
+          scholarships,
+        };
+      }
+
+      if (st.mode === "batch" && st.batch) {
+        const b = st.batch;
+        const policies = Array.isArray(b?.policies) ? b.policies : [];
+        const scholarships = Array.isArray(b?.scholarships)
+          ? b.scholarships.filter(Boolean)
+          : b?.scholarship && typeof b.scholarship === "object"
+          ? [b.scholarship]
+          : [];
+
+        return {
+          conditions: b?.conditions || null,
+          results: policies,
+          scholarships,
+        };
+      }
+    }
+
+    // ✅ 기존 흐름(QuestionPage → ResultPage)
+    return {
+      conditions: st?.conditions || null,
+      results: Array.isArray(st?.results) ? st.results : [],
+      scholarships: Array.isArray(st?.scholarships) ? st.scholarships : [],
+    };
+  }, [location.state]);
+
+  const conditions = incoming.conditions;
+  const incomingResults = incoming.results;
+  const incomingScholarships = incoming.scholarships;
 
   // ✅ UI는 최대 6개, 저장은 Top5
   const results = useMemo(() => incomingResults.slice(0, 6), [incomingResults]);
-  const top5ForSave = useMemo(() => incomingResults.slice(0, 5), [incomingResults]);
+  const top5ForSave = useMemo(
+    () => incomingResults.slice(0, 5),
+    [incomingResults]
+  );
 
   const [selected, setSelected] = useState(results[0] || null);
   const [selectedScholarship, setSelectedScholarship] = useState(
@@ -182,9 +229,6 @@ function ResultPage() {
     if (!conditions) return;
     if (!Array.isArray(top5ForSave) || top5ForSave.length === 0) return;
 
-    // ❌ 기존 문제: 장학금이 0개면 추천 세션 저장을 아예 스킵했음
-    // if (conditions?.scholarshipCategory && incomingScholarships.length === 0) return;
-
     savedRecoRef.current = true;
 
     // 1) DB 저장
@@ -200,15 +244,13 @@ function ResultPage() {
             score: r.score ?? null,
           }))
           .filter((x) => x.policy_id != null),
-        // ✅ 장학금도 같이 저장 (0개면 그냥 [] 저장)
         scholarships: incomingScholarships ?? [],
       }),
     }).catch((e) => {
       console.warn("recommendation save failed:", e?.message);
-      // savedRecoRef.current = false; // 재시도 원하면 주석 해제
     });
 
-    // 2) localStorage fallback 저장 (MyPage가 API 실패해도 보여줄 수 있게)
+    // 2) localStorage fallback 저장
     try {
       const k = "polystep_recent_result_batches";
       const raw = localStorage.getItem(k);
@@ -217,7 +259,7 @@ function ResultPage() {
 
       const batch = {
         created_at: new Date().toISOString(),
-        scholarship: incomingScholarships?.[0] || null,
+        scholarships: incomingScholarships ?? [], // ✅ 여러개 저장
         policies: top5ForSave.map((p) => ({
           id: p.id ?? null,
           policy_id: p.policy_id ?? p.id ?? null,
@@ -228,6 +270,7 @@ function ResultPage() {
           badge_status: p.badge_status ?? null,
           score: p.score ?? null,
         })),
+        conditions,
       };
 
       const next = [batch, ...arr].slice(0, 200);
@@ -259,8 +302,7 @@ function ResultPage() {
     const el = logBoxRef.current;
     if (!el) return;
     const threshold = 24;
-    const atBottom =
-      el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
     setAutoScroll(atBottom);
   };
 
@@ -286,19 +328,14 @@ function ResultPage() {
 
     pushLog(`검증 시작: "${selected.title}" (policy_id=${selected.policy_id})`);
 
-    const API_BASE =
-      import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
-    const wsBase = API_BASE.replace("http://", "ws://").replace(
-      "https://",
-      "wss://"
-    );
+    const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+    const wsBase = API_BASE.replace("http://", "ws://").replace("https://", "wss://");
     const wsUrl = `${wsBase}/policies/ws/${selected.policy_id}/verify`;
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
-    ws.onopen = () =>
-      pushLog("WebSocket 연결됨. 브라우저 자동 검증을 시작합니다...");
+    ws.onopen = () => pushLog("WebSocket 연결됨. 브라우저 자동 검증을 시작합니다...");
 
     ws.onmessage = (evt) => {
       try {
@@ -393,10 +430,8 @@ function ResultPage() {
               type="button"
               className="result-next-btn"
               onClick={() =>
-                navigate(`/final/${selected.policy_id}`, {
-                  state: {
-                    selectedScholarship,
-                  },
+                navigate(`/final/${selected?.policy_id}`, {
+                  state: { selectedScholarship },
                 })
               }
               disabled={!selected}
@@ -468,24 +503,16 @@ function ResultPage() {
                 <span className="tag-group-label">정책정보</span>
 
                 {conditions?.income && (
-                  <span className="result-tag tag-policy">
-                    연소득: {conditions.income}만 원
-                  </span>
+                  <span className="result-tag tag-policy">연소득: {conditions.income}만 원</span>
                 )}
                 {conditions?.policyField && (
-                  <span className="result-tag tag-policy">
-                    분야: {conditions.policyField}
-                  </span>
+                  <span className="result-tag tag-policy">분야: {conditions.policyField}</span>
                 )}
                 {conditions?.jobStatus && (
-                  <span className="result-tag tag-policy">
-                    상태: {conditions.jobStatus}
-                  </span>
+                  <span className="result-tag tag-policy">상태: {conditions.jobStatus}</span>
                 )}
                 {conditions?.specialField && (
-                  <span className="result-tag tag-policy">
-                    특화: {conditions.specialField}
-                  </span>
+                  <span className="result-tag tag-policy">특화: {conditions.specialField}</span>
                 )}
               </div>
             </div>
@@ -522,16 +549,8 @@ function ResultPage() {
                         <h2 className="result-card-title" style={{ margin: 0 }}>
                           {s.name}
                         </h2>
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: "0.45rem",
-                            alignItems: "center",
-                          }}
-                        >
-                          {s.category && (
-                            <span className="result-score-pill">{s.category}</span>
-                          )}
+                        <div style={{ display: "flex", gap: "0.45rem", alignItems: "center" }}>
+                          {s.category && <span className="result-score-pill">{s.category}</span>}
                           {s.user_fit && (
                             <span style={badgeStyle(s.user_fit)}>{fitLabel(s.user_fit)}</span>
                           )}
@@ -558,8 +577,7 @@ function ResultPage() {
                           "장학금 요약 정보 없음"}
                       </p>
 
-                      {(s.user_fit_reason ||
-                        (s.missing_info && s.missing_info.length > 0)) && (
+                      {(s.user_fit_reason || (s.missing_info && s.missing_info.length > 0)) && (
                         <p
                           className="result-card-meta"
                           style={{ marginTop: "0.55rem", lineHeight: 1.4, opacity: 0.92 }}
@@ -590,9 +608,7 @@ function ResultPage() {
                         )}
                         {Array.isArray(s.llm_card?.eligibility_bullets) &&
                           s.llm_card.eligibility_bullets.length > 0 && (
-                            <span className="result-tag">
-                              조건: {s.llm_card.eligibility_bullets[0]}
-                            </span>
+                            <span className="result-tag">조건: {s.llm_card.eligibility_bullets[0]}</span>
                           )}
                       </div>
 
@@ -656,7 +672,7 @@ function ResultPage() {
               ) : (
                 results.map((item) => (
                   <button
-                    key={item.policy_id}
+                    key={item.policy_id ?? item.id}
                     type="button"
                     className={
                       "result-card" +
@@ -723,9 +739,7 @@ function ResultPage() {
 
                     <div className="result-card-bottom">
                       <div className="result-tags">
-                        <span className="result-tag">
-                          연령: {fmtAge(item.age_min, item.age_max)}
-                        </span>
+                        <span className="result-tag">연령: {fmtAge(item.age_min, item.age_max)}</span>
                         <span className="result-tag">모집: {item.apply_period_type || "-"}</span>
                         <span className="result-tag">마감: {fmtDate(item.biz_end)}</span>
                       </div>
@@ -741,30 +755,11 @@ function ResultPage() {
           {/* RIGHT: iframe/실시간 */}
           <section className="result-detail-panel detail-panel">
             <div className="detail-card" style={{ height: "100%" }}>
-              <div
-                className="detail-iframe-block"
-                style={{ width: "100%", height: "100%", minHeight: 520 }}
-              >
+              <div className="detail-iframe-block" style={{ width: "100%", height: "100%", minHeight: 520 }}>
                 {isVerifying ? (
-                  <div
-                    style={{
-                      height: "100%",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "0.8rem",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        gap: "0.8rem",
-                      }}
-                    >
-                      <div style={{ fontWeight: 800, color: "#e5e7eb" }}>
-                        브라우저 자동 탐색 화면
-                      </div>
+                  <div style={{ height: "100%", display: "flex", flexDirection: "column", gap: "0.8rem" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.8rem" }}>
+                      <div style={{ fontWeight: 800, color: "#e5e7eb" }}>브라우저 자동 탐색 화면</div>
                       <button
                         type="button"
                         className="result-back-btn"
@@ -829,15 +824,8 @@ function ResultPage() {
 
         {/* BOTTOM: 로그 */}
         <section className="result-list-panel log-panel">
-          <div
-            className="list-head"
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "flex-end",
-              gap: "1rem",
-            }}
-          >
+          {/* ✅ 헤더 정렬은 class로 제어 */}
+          <div className="list-head log-head">
             <div>
               <p className="list-count" style={{ marginBottom: 4 }}>
                 검증 로그
@@ -847,7 +835,7 @@ function ResultPage() {
               </p>
             </div>
 
-            <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
+            <div className="log-actions">
               <button
                 type="button"
                 className="result-back-btn"
@@ -859,20 +847,8 @@ function ResultPage() {
             </div>
           </div>
 
-          <div
-            ref={logBoxRef}
-            onScroll={handleLogScroll}
-            style={{
-              marginTop: "0.9rem",
-              borderRadius: 14,
-              border: "1px solid rgba(148, 163, 184, 0.35)",
-              background: "rgba(15, 23, 42, 0.9)",
-              padding: "0.9rem 1rem",
-              minHeight: 160,
-              maxHeight: 260,
-              overflow: "auto",
-            }}
-          >
+          {/* ✅ 로그 박스도 class로 제어 */}
+          <div ref={logBoxRef} onScroll={handleLogScroll} className="log-box">
             {verifyLogs.length === 0 ? (
               <p style={{ margin: 0, color: "#9ca3af", fontSize: "0.85rem" }}>
                 아직 로그가 없어요. “검증하기”를 눌러보세요.

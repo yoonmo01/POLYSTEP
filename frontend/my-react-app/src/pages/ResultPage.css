@@ -114,6 +114,7 @@
 /* ✅ 3컬럼: 장학금 / 정책 / iframe */
 .result-layout-3col {
   margin-top: 0.6rem;
+  margin-bottom: 1.0rem;
   display: grid;
   grid-template-columns: minmax(500px, 1.2fr)
                          minmax(500px, 1.6fr)
@@ -147,6 +148,19 @@
 
 .list-head {
   margin-bottom: 0.9rem;
+}
+
+.log-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start; 
+  gap: 1rem;
+}
+.log-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  padding-top: 13px;
 }
 
 .list-count {
@@ -336,11 +350,34 @@
   color: #9ca3af;
 }
 
-/* =========================
-   하단 로그 (전체 폭)
-   ========================= */
+
 .log-panel {
   grid-column: 1 / -1;
+   margin-top: 1.0rem;    /* ✅ 위 카드영역과 더 띄우기 */
+   padding-top: 0.5rem;   /* ✅ 안쪽도 위 여유 */
+   position: relative;
+ }
+
+.log-box {
+  margin-top: 0rem; /* ✅ 기존 0.9rem → 더 위로(원하면 0.2~0.5로 조절) */
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.9);
+  padding: 0.9rem 1rem;
+  min-height: 160px;
+  max-height: 260px;
+  overflow: auto;
+}
+
+ /* ✅ 로그 섹션 상단 구분선(시각적으로 확실히 분리) */
+.log-panel::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 1.4rem;
+  right: 1.4rem;
+  height: 1px;
+  background: rgba(148, 163, 184, 0.22);
 }
 
 /* =========================
