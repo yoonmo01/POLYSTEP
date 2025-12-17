@@ -23,10 +23,14 @@ def create_app() -> FastAPI:
     app = FastAPI(title=settings.app_name)
 
     # CORS 설정
-    origins: list[str] = []
-    if settings.frontend_origin:
+    origins: list[str] = [
+        "http://localhost:5173",
+        "http://13.125.63.208:5173",  # ✅ 외부 운영 테스트용 프론트
+    ]
+
+    # settings.frontend_origin 이 있으면 추가 (중복 허용 안 됨)
+    if settings.frontend_origin and settings.frontend_origin not in origins:
         origins.append(settings.frontend_origin)
-    origins.append("http://localhost:5173")
 
     app.add_middleware(
         CORSMiddleware,
@@ -34,6 +38,7 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        max_age=600,
     )
 
     # 라우터 등록

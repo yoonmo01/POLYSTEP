@@ -6,7 +6,7 @@
 # from app.db import SessionLocal
 # from app.models import Policy
 
-# CSV_PATH = "C:/POLYSTEP/policies_cleaned_final.csv"  # 🔥 필요하면 경로 수정
+# CSV_PATH = "/home/ubuntu/POLYSTEP/policies_cleaned_final.csv"  # 🔥 필요하면 경로 수정
 
 
 # def clean_ymd(value: Any) -> Optional[str]:
@@ -212,7 +212,7 @@ from app.db import SessionLocal
 from app.models import Policy
 
 # ✅ 강원도 전용 CSV
-CSV_PATH = "C:/POLYSTEP/policies_cleaned_final_gangwon_only.csv"
+CSV_PATH = "/home/ubuntu/POLYSTEP/policies_cleaned_final_gangwon_only.csv"
 
 
 def clean_ymd(value: Any) -> Optional[str]:

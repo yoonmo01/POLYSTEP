@@ -29,6 +29,13 @@ _NOT_FOUND_HINTS = [
     "자료가 없습니다",
     "조회된",
     "없습니다",
+    # ✅ 한국어 실패/미발견 케이스(LLM이 자연어로 실패 요약할 때 대비)
+    "찾을 수 없",         # 찾을 수 없었습니다/없음 등
+    "발견하지 못",        # 발견하지 못했습니다
+    "확인할 수 없",       # 확인할 수 없습니다
+    "정보가 없",          # 정보가 없습니다
+    "페이지가 비어",      # 페이지가 비어 있어
+    "상세 정보를",        # 상세 정보를 담은 ... 발견하지 못했습니다 (같은 패턴)
 ]
 _JUDGE_FAIL_HINTS = [
     "Judge Verdict: ❌ FAIL",
@@ -48,8 +55,8 @@ from app.models import Policy
 logger = logging.getLogger(__name__)
 
 # ✅ Windows에서 subprocess를 쓰는 라이브러리(browser-use/Playwright) 안전장치
-# - uvicorn/fastapi가 Selector loop로 떠도, "별도 스레드에서 Proactor loop"로 에이전트를 돌리면 해결됨
 _IS_WINDOWS = sys.platform.startswith("win")
+_IS_LINUX = sys.platform.startswith("linux")
 
 # (옵션) import 시점에도 policy를 한 번 세팅해둔다 (이미 생성된 loop에는 영향 없고, 새 loop에만 적용)
 if _IS_WINDOWS:
@@ -60,8 +67,6 @@ if _IS_WINDOWS:
         logger.warning("[BrowserService] (import) failed to set Proactor policy: %s", e)
 
 # ✅ .env 로딩을 "확실하게"
-# - 실행 cwd가 backend/app 여도 상위로 올라가며 .env를 찾도록
-# - override 여부는 환경변수로 제어 가능
 _DOTENV_PATH = find_dotenv(".env", usecwd=True)
 _DOTENV_OVERRIDE = os.getenv("DOTENV_OVERRIDE", "false").lower() in (
     "1",
@@ -86,6 +91,12 @@ _SCREENSHOT_TIMEOUT_RE = re.compile(
 )
 _DOMWATCHDOG_SCREENSHOT_FAIL_RE = re.compile(r"Clean screenshot failed", re.IGNORECASE)
 
+# ✅ Browser 시작/런치(CDP) 타임아웃 계열 패턴 (이번 AWS 에러 대응)
+_BROWSER_START_TIMEOUT_RE = re.compile(
+    r"(BrowserStartEvent|BrowserLaunchEvent).*timed out|Cannot connect to host 127\.0\.0\.1:\d+|_wait_for_cdp_url",
+    re.IGNORECASE,
+)
+
 
 def _is_browser_snapshot_timeout(e: Exception) -> bool:
     msg = f"{type(e).__name__}: {e}"
@@ -94,12 +105,14 @@ def _is_browser_snapshot_timeout(e: Exception) -> bool:
     )
 
 
+def _is_browser_start_timeout(e: Exception) -> bool:
+    msg = f"{type(e).__name__}: {e}"
+    return bool(_BROWSER_START_TIMEOUT_RE.search(msg))
+
+
 def _normalize_url(raw: Optional[str]) -> str:
     """
     ✅ 정책/DB에 'www.xxx.com' 처럼 scheme 없는 URL이 들어오는 케이스 정규화.
-    - 공백/줄바꿈 제거
-    - http/https 없으면 https:// 자동 부착
-    - 'http(s)://'만 있고 host 없는 이상값은 원문 반환(추가 에러 방지)
     """
     s = (raw or "").strip()
     if not s:
@@ -127,6 +140,19 @@ def _env_int(name: str, default: int = 0) -> int:
         return default
 
 
+def _build_kwargs_for_callable(fn: Any, desired: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    ✅ 라이브러리 버전 차이로 __init__ 시그니처가 달라도,
+    실제로 받는 파라미터만 골라서 안전하게 kwargs를 구성한다.
+    """
+    try:
+        sig = inspect.signature(fn)
+        allowed = set(sig.parameters.keys())
+        return {k: v for k, v in desired.items() if (k in allowed and v is not None)}
+    except Exception:
+        return {k: v for k, v in desired.items() if v is not None}
+
+
 def _is_overload_error(e: Exception) -> bool:
     msg = f"{type(e).__name__}: {e}"
     return (
@@ -139,6 +165,26 @@ def _is_overload_error(e: Exception) -> bool:
 
 def _normalize_text_for_windows(text: str) -> str:
     return (text or "").replace("\u00a0", " ").replace("\u200b", " ").strip()
+
+
+def _has_display() -> bool:
+    """
+    ✅ Linux 서버에서 headful 실행 가능 여부(대부분 DISPLAY 없음)
+    """
+    if not _IS_LINUX:
+        return True
+    disp = (os.getenv("DISPLAY", "") or "").strip()
+    wayland = (os.getenv("WAYLAND_DISPLAY", "") or "").strip()
+    return bool(disp or wayland)
+
+
+def _should_force_headless(headless: bool) -> bool:
+    """
+    ✅ Linux + DISPLAY 없음이면 headless 강제
+    """
+    if _IS_LINUX and not _has_display():
+        return True
+    return headless
 
 
 # ============================================================
@@ -197,11 +243,6 @@ class _WSStream:
 # ✅ (핵심) "파일 감시" 대신, Playwright 페이지를 직접 캡처해서 WS로 스트리밍
 # ============================================================
 def _is_page_like(obj: Any) -> bool:
-    """
-    Playwright Page 유사 객체인지 휴리스틱으로 판별.
-    - page.screenshot() (async) 존재
-    - page.url 또는 page.goto 존재
-    """
     if obj is None:
         return False
     try:
@@ -215,11 +256,6 @@ def _is_page_like(obj: Any) -> bool:
 
 
 def _deep_find_page_like(root: Any, max_depth: int = 4, max_nodes: int = 400) -> Any:
-    """
-    browser-use 내부 구조가 버전별로 달라서,
-    알려진 attribute path로 못 찾을 때 딥 스캔으로 Page-like 객체를 찾는다.
-    - 너무 깊게/많이 탐색하면 느려질 수 있어 제한을 둠.
-    """
     if root is None:
         return None
 
@@ -229,7 +265,7 @@ def _deep_find_page_like(root: Any, max_depth: int = 4, max_nodes: int = 400) ->
 
     while q and n < max_nodes:
         cur, depth = q.popleft()
-        n += 1  # ✅ FIX: n = 1 이 아니라 누적 증가해야 함
+        n += 1
 
         if cur is None:
             continue
@@ -251,21 +287,18 @@ def _deep_find_page_like(root: Any, max_depth: int = 4, max_nodes: int = 400) ->
         if depth >= max_depth:
             continue
 
-        # dict
         if isinstance(cur, dict):
             for v in list(cur.values())[:60]:
                 if v is not None:
                     q.append((v, depth + 1))
             continue
 
-        # list/tuple/set
         if isinstance(cur, (list, tuple, set)):
             for v in list(cur)[:60]:
                 if v is not None:
                     q.append((v, depth + 1))
             continue
 
-        # 일반 객체: __dict__ 우선 + dir() 제한적으로
         try:
             d = getattr(cur, "__dict__", None)
             if isinstance(d, dict):
@@ -278,7 +311,6 @@ def _deep_find_page_like(root: Any, max_depth: int = 4, max_nodes: int = 400) ->
         except Exception:
             pass
 
-        # dir()로 보강 (너무 무겁지 않게 제한)
         try:
             for name in dir(cur)[:120]:
                 if name.startswith("__"):
@@ -303,10 +335,6 @@ def _deep_find_page_like(root: Any, max_depth: int = 4, max_nodes: int = 400) ->
 
 
 def _try_get_playwright_page(browser: Any) -> Any:
-    """
-    ✅ browser-use Browser 객체에서 Playwright Page를 최대한 안전하게 찾아온다.
-    (버전/내부구조 차이를 고려해 여러 경로를 시도)
-    """
     candidates = [
         ("page",),
         ("_page",),
@@ -320,7 +348,6 @@ def _try_get_playwright_page(browser: Any) -> Any:
         ("_manager", "page"),
         ("playwright_page",),
         ("_playwright_page",),
-        # browser-use 내부에서 자주 보이는 이름들(버전차 대응)
         ("_browser", "contexts"),
         ("_browser",),
         ("_context",),
@@ -339,7 +366,6 @@ def _try_get_playwright_page(browser: Any) -> Any:
         if not ok or cur is None:
             continue
 
-        # contexts/pages 경로로 들어온 경우 처리
         try:
             if isinstance(cur, list) and cur:
                 ctx = cur[-1]
@@ -351,7 +377,6 @@ def _try_get_playwright_page(browser: Any) -> Any:
         except Exception:
             pass
 
-    # context.pages 우회
     ctx = getattr(browser, "context", None) or getattr(browser, "_context", None)
     if ctx is not None:
         try:
@@ -361,7 +386,6 @@ def _try_get_playwright_page(browser: Any) -> Any:
         except Exception:
             pass
 
-    # ✅ 마지막 우회: 딥 스캔(버전/내부 구조 상이 대응)
     try:
         found = _deep_find_page_like(browser, max_depth=4, max_nodes=400)
         if found is not None:
@@ -380,10 +404,6 @@ async def _pump_live_screenshots(
     jpeg_quality: int = 55,
     max_bytes: int = 900_000,
 ) -> None:
-    """
-    ✅ 파일 저장 없이, page.screenshot()을 직접 찍어 WS로 스트리밍.
-    - JPEG로 용량을 줄여 프론트 렌더/전송 안정성 확보
-    """
     if not screenshot_callback:
         return
 
@@ -404,7 +424,6 @@ async def _pump_live_screenshots(
                     await asyncio.sleep(0.2)
                     continue
 
-            # ✅ screenshot이 내부적으로 hang/timeout 나는 케이스가 있어서 타임아웃으로 감싼다
             buf = await asyncio.wait_for(
                 page.screenshot(type="jpeg", quality=jpeg_quality, full_page=False),
                 timeout=6.0,
@@ -776,7 +795,7 @@ class BrowserService:
         log_callback: AsyncLogCallback = None,
         screenshot_callback: AsyncScreenshotCallback = None,
     ) -> Dict[str, Any]:
-        # ✅ 지금 실행 중인 이벤트루프/정책 확인(Windows NotImplementedError 디버깅 핵심)
+        # ✅ 이벤트루프/정책 확인(디버깅용)
         try:
             policy_name = type(asyncio.get_event_loop_policy()).__name__
             logger.info("[BrowserService] EVENT LOOP POLICY = %s", policy_name)
@@ -836,6 +855,9 @@ class BrowserService:
 
             return await asyncio.to_thread(_thread_entry)
 
+        # ============================================================
+        # ✅ URL 정규화
+        # ============================================================
         if entry_url:
             entry_url = _normalize_url(entry_url)
         if log_callback and entry_url:
@@ -848,10 +870,21 @@ class BrowserService:
         downloads_dir = ensure_download_dir()
         logger.info("[BrowserService] Using downloads_dir=%s", downloads_dir)
 
-        headless = _env_flag("BROWSER_HEADLESS", "true")
-        keep_open = _env_flag("BROWSER_KEEP_OPEN", "false")
+        # ============================================================
+        # ✅ 서버 안정성: Linux 서버에서 DISPLAY 없으면 headless 강제
+        # ============================================================
+        headless_env = _env_flag("BROWSER_HEADLESS", "true")
+        headless = _should_force_headless(headless_env)
+
+        # keep_open: 서버에선 기본 false가 안정적. (env로만 true 권장)
+        keep_open_default = "false" if _IS_LINUX else "false"
+        keep_open = _env_flag("BROWSER_KEEP_OPEN", keep_open_default)
+        if _IS_LINUX and keep_open:
+            logger.warning("[BrowserService] BROWSER_KEEP_OPEN=true on Linux server is not recommended (may leak processes).")
+            if log_callback:
+                await log_callback("⚠️ 서버(Linux)에서는 BROWSER_KEEP_OPEN=true 비추천(크롬 프로세스 누수 위험). false 권장")
         debug_ui = _env_flag("BROWSER_DEBUG_UI", "false")
-        slowmo_ms = _env_int("BROWSER_SLOWMO_MS", 250)
+        slowmo_ms = _env_int("BROWSER_SLOWMO_MS", 0 if _IS_LINUX else 250)
 
         collect_images = _env_flag("BROWSER_COLLECT_IMAGE_URLS", "true")
         max_image_urls = _env_int("BROWSER_MAX_IMAGE_URLS", 30)
@@ -864,12 +897,20 @@ class BrowserService:
         max_actions = _env_int("BROWSER_AGENT_MAX_ACTIONS", 20)
         max_time_sec = float(os.getenv("BROWSER_MAX_TIME_SEC", os.getenv("BROWSER_AGENT_MAX_TIME_SEC", "300")))
 
+        chromium_sandbox = _env_flag("BROWSER_CHROMIUM_SANDBOX", "false")
+
         allowed_domains_raw = (os.getenv("BROWSER_ALLOWED_DOMAINS", "") or "").strip()
         allowed_domains = [d.strip() for d in allowed_domains_raw.split(",") if d.strip()] or None
 
-        if debug_ui:
+        # debug_ui는 로컬에서만 의미가 있고, 서버에선 DISPLAY 없어서 깨짐 → 무시(혹은 headless 강제 유지)
+        if debug_ui and _has_display():
             headless = False
             keep_open = True
+            slowmo_ms = max(slowmo_ms, 150)
+        elif debug_ui and not _has_display():
+            if log_callback:
+                await log_callback("⚠️ DEBUG_UI가 켜져있지만 서버에 DISPLAY가 없어 headless로 강제합니다.")
+            headless = True
 
         max_retries = int(os.getenv("BROWSER_LLM_MAX_RETRIES", "3"))
         base_backoff = float(os.getenv("BROWSER_LLM_BACKOFF_SEC", "2.0"))
@@ -884,15 +925,59 @@ class BrowserService:
             max_time_sec,
             allowed_domains or "(none)",
         )
+        if log_callback and _IS_LINUX:
+            await log_callback(f"🐧 Linux detected: DISPLAY={'yes' if _has_display() else 'no'} → headless={headless}")
 
-        try:
-            browser = Browser(
-                headless=headless,
-                downloads_path=downloads_dir,
-                slow_mo=slowmo_ms if slowmo_ms > 0 else None,
-            )
-        except TypeError:
-            browser = Browser(headless=headless, downloads_path=downloads_dir)
+        # ============================================================
+        # ✅ Browser 생성 함수 (실패 시 fallback/retry 용)
+        # ============================================================
+        async def _create_browser(headless_value: bool) -> Any:
+            try:
+                default_pw_chrome = "/home/ubuntu/.cache/ms-playwright/chromium-1200/chrome-linux64/chrome"
+                browser_exec_path = (os.getenv("BROWSER_EXECUTABLE_PATH", "") or "").strip() or default_pw_chrome
+
+                server_args = [
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                    "--disable-setuid-sandbox",
+                    "--disable-features=TranslateUI",
+                    "--disable-background-networking",
+                    "--disable-background-timer-throttling",
+                    "--disable-renderer-backgrounding",
+                    "--disable-breakpad",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                ]
+
+                desired_kwargs: Dict[str, Any] = {
+                    "headless": headless_value,
+                    "downloads_path": downloads_dir,
+                    "slow_mo": slowmo_ms if slowmo_ms > 0 else None,
+                    "executable_path": browser_exec_path,
+                    "args": server_args,
+                    "chromium_sandbox": chromium_sandbox,
+                    "keep_alive": keep_open,
+                }
+
+                init_kwargs = _build_kwargs_for_callable(Browser.__init__, desired_kwargs)
+                b = Browser(**init_kwargs)
+
+                logger.info("[BrowserService] Using browser executable: %s", browser_exec_path)
+                if log_callback:
+                    await log_callback(f"✅ browser executable_path: {browser_exec_path}")
+                    await log_callback(f"✅ headless={headless_value} chromium_sandbox={chromium_sandbox} keep_alive={keep_open}")
+                return b
+            except Exception as e:
+                logger.warning("[BrowserService] Browser init fallback due to: %s", e)
+                if log_callback:
+                    await log_callback(f"⚠️ Browser init fallback: {e}")
+                try:
+                    return Browser(headless=headless_value, downloads_path=downloads_dir)
+                except Exception:
+                    return Browser(headless=headless_value)
+
+        browser = await _create_browser(headless)
 
         llm = ChatGoogle(model="gemini-2.5-pro")
 
@@ -978,6 +1063,7 @@ class BrowserService:
                     "browser_use.agent",
                     "browser_use.browser",
                     "cdp_use",
+                    "bubus",
                 ]
                 if _env_flag("BROWSER_CONSOLE_DEDUP", "true"):
                     _make_console_single_source(lib_logger_names)
@@ -1004,33 +1090,43 @@ class BrowserService:
             except Exception as e:
                 await log_callback(f"⚠️ WS 로그 브릿지 설정 실패: {e}")
 
-        try:
-            history = None
-            last_err: Optional[Exception] = None
+        # ============================================================
+        # ✅ agent.run() (BrowserStart/CDP 실패 시 headless로 1회 자동 재시도)
+        # ============================================================
+        history = None
+        last_err: Optional[Exception] = None
 
-            # ============================================================
-            # ✅ (핵심) 실시간 화면 스트리밍: page.screenshot() 직접 캡처
-            # ============================================================
-            screenshot_task_live: Optional[asyncio.Task] = None
-            if screenshot_callback:
-                interval_sec = float(os.getenv("BROWSER_LIVE_SHOT_INTERVAL_SEC", "0.5"))
-                jpeg_quality = int(os.getenv("BROWSER_LIVE_SHOT_JPEG_QUALITY", "55"))
-                max_bytes = int(os.getenv("BROWSER_LIVE_SHOT_MAX_BYTES", "900000"))
-                screenshot_task_live = asyncio.create_task(
-                    _pump_live_screenshots(
-                        browser=browser,
-                        screenshot_callback=screenshot_callback,
-                        log_callback=log_callback,
-                        interval_sec=interval_sec,
-                        jpeg_quality=jpeg_quality,
-                        max_bytes=max_bytes,
-                    )
+        screenshot_task_live: Optional[asyncio.Task] = None
+        if screenshot_callback:
+            interval_sec = float(os.getenv("BROWSER_LIVE_SHOT_INTERVAL_SEC", "0.5"))
+            jpeg_quality = int(os.getenv("BROWSER_LIVE_SHOT_JPEG_QUALITY", "55"))
+            max_bytes = int(os.getenv("BROWSER_LIVE_SHOT_MAX_BYTES", "900000"))
+            screenshot_task_live = asyncio.create_task(
+                _pump_live_screenshots(
+                    browser=browser,
+                    screenshot_callback=screenshot_callback,
+                    log_callback=log_callback,
+                    interval_sec=interval_sec,
+                    jpeg_quality=jpeg_quality,
+                    max_bytes=max_bytes,
                 )
-                if log_callback:
-                    await log_callback(
-                        f"[live-shot] enabled interval={interval_sec}s quality={jpeg_quality} max_bytes={max_bytes}"
-                    )
+            )
+            if log_callback:
+                await log_callback(
+                    f"[live-shot] enabled interval={interval_sec}s quality={jpeg_quality} max_bytes={max_bytes}"
+                )
 
+        async def _stop_live_shot() -> None:
+            nonlocal screenshot_task_live
+            if screenshot_task_live:
+                screenshot_task_live.cancel()
+                try:
+                    await screenshot_task_live
+                except Exception:
+                    pass
+                screenshot_task_live = None
+
+        try:
             for attempt in range(0, max_retries + 1):
                 try:
                     if attempt > 0 and log_callback:
@@ -1043,6 +1139,7 @@ class BrowserService:
                     last_err = None
                     break
                 except Exception as e:
+                    # ✅ screenshot/DOM watchdog timeout
                     if _is_browser_snapshot_timeout(e):
                         snapshot_failures += 1
                         logger.warning(
@@ -1052,12 +1149,7 @@ class BrowserService:
                             e,
                         )
                         if snapshot_failures >= max_snapshot_failures:
-                            if screenshot_task_live:
-                                screenshot_task_live.cancel()
-                                try:
-                                    await screenshot_task_live
-                                except Exception:
-                                    pass
+                            await _stop_live_shot()
                             return {
                                 "matched": None,
                                 "matched_title": None,
@@ -1078,6 +1170,46 @@ class BrowserService:
                                 "needs_review": True,
                             }
 
+                    # ✅ AWS에서 터진 케이스: BrowserStart/CDP 포트 연결 실패 → headless 재시도
+                    if _IS_LINUX and (not headless) and _is_browser_start_timeout(e):
+                        if log_callback:
+                            await log_callback("⚠️ BrowserStart/CDP 실패 감지: 서버에서 headful 실행이 불안정 → headless로 1회 재시도합니다.")
+                        try:
+                            await _stop_live_shot()
+                            try:
+                                await browser.close()  # type: ignore[attr-defined]
+                            except Exception:
+                                pass
+
+                            headless = True
+                            browser = await _create_browser(headless)
+                            agent_kwargs["browser"] = browser
+
+                            try:
+                                agent = Agent(**agent_kwargs)
+                            except TypeError:
+                                agent = Agent(task=_normalize_text_for_windows(task), llm=llm, browser=browser)
+
+                            if screenshot_callback:
+                                interval_sec = float(os.getenv("BROWSER_LIVE_SHOT_INTERVAL_SEC", "0.5"))
+                                jpeg_quality = int(os.getenv("BROWSER_LIVE_SHOT_JPEG_QUALITY", "55"))
+                                max_bytes = int(os.getenv("BROWSER_LIVE_SHOT_MAX_BYTES", "900000"))
+                                screenshot_task_live = asyncio.create_task(
+                                    _pump_live_screenshots(
+                                        browser=browser,
+                                        screenshot_callback=screenshot_callback,
+                                        log_callback=log_callback,
+                                        interval_sec=interval_sec,
+                                        jpeg_quality=jpeg_quality,
+                                        max_bytes=max_bytes,
+                                    )
+                                )
+                            # ✅ 재시도는 한 번만
+                            continue
+                        except Exception as e2:
+                            if log_callback:
+                                await log_callback(f"❌ headless 재시도 준비 중 실패: {e2}")
+
                     last_err = e
                     if _is_overload_error(e) and attempt < max_retries:
                         sleep_s = base_backoff * (2 ** attempt)
@@ -1086,13 +1218,7 @@ class BrowserService:
                         continue
                     raise
 
-            # ✅ 라이브 스크린샷 펌프 종료
-            if screenshot_task_live:
-                screenshot_task_live.cancel()
-                try:
-                    await screenshot_task_live
-                except Exception:
-                    pass
+            await _stop_live_shot()
 
             if history is None:
                 raise last_err or RuntimeError("Agent run failed with unknown error")
@@ -1192,6 +1318,9 @@ class BrowserService:
                 except Exception:
                     pass
 
+        # ============================================================
+        # ✅ 다운로드 파일 리스트
+        # ============================================================
         post_files = _list_files_safe(downloads_dir)
         new_files = sorted(list(post_files - pre_files))
 
@@ -1335,6 +1464,7 @@ class BrowserService:
                 "apply_channel": None,
                 "apply_period": None,
                 "contact": {},
+                "contact": {"org": "", "tel": "", "site": ""},
                 "evidence_text": text,
                 "navigation_path": [],
                 "error_message": "POLICY_NOT_FOUND",
