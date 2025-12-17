@@ -2,7 +2,8 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import heroBg from "../assets/HomePage_BackGround.jpg";
-import "./HomePage.css";
+import PolicySitesGraph from "../components/PolicySitesGraph";
+import "./Homepage.css";
 
 import { clearUser } from "../auth";
 import { apiFetch } from "../api";
@@ -128,6 +129,22 @@ const HomePage = () => {
             <div className="info-item">
               <h4>AI 요약</h4>
               <p>긴 공고문을 읽지 않아도, 핵심만 빠르게 파악할 수 있습니다.</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="home-graph">
+          <div className="home-graph-header">
+            <h2>POLYSTEP 통합 그래프</h2>
+            <p>
+              온통청년·한국장학재단 등 다양한 청년 정책/장학 사이트 정보를 POLYSTEP에서
+              한 번에 연결해 보여줍니다.
+            </p>
+          </div>
+
+          <div className="home-graph-card">
+            <div className="home-graph-canvas">
+              <PolicySitesGraph />
             </div>
           </div>
         </section>

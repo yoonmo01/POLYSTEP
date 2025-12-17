@@ -10,7 +10,6 @@ import QuestionPage from "./pages/QuestionPage";
 import ResultPage from "./pages/ResultPage";
 import FinalPage from "./pages/FinalPage";
 import MyPage from "./pages/MyPage";
-
 import { getUser, clearUser } from "./auth";
 import { apiFetch } from "./api";
 
