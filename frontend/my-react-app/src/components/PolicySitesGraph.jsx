@@ -31,6 +31,174 @@ const DEFAULT_SITE_CATALOG = [
       "정부 서비스·지원 정책을 한 곳에서 검색하고 신청/민원 안내까지 확인할 수 있는 통합 포털이에요.",
     kind: "site",
   },
+  {
+    id: "seoul_scholarship",
+    label: "서울장학재단",
+    url: "https://www.hissf.or.kr/",
+    summary:
+      "서울 시민과 학생들을 위한 다양한 장학금 지원 및 인재 양성 프로그램을 운영하는 재단입니다.",
+    kind: "site",
+  },
+  {
+    id: "work24",
+    label: "고용24",
+    url: "https://www.work24.go.kr/",
+    summary:
+      "청년 일자리, 내일배움카드, 국민취업지원제도 등 취업 준비부터 역량 강화까지 필요한 모든 고용 서비스를 한 번에 해결할 수 있어요.",
+    kind: "site",
+  },
+  {
+    id: "dreamspon",
+    label: "드림스폰",
+    url: "https://www.dreamspon.com/",
+    summary:
+      "전국 대학생 장학금, 대외활동, 공모전 정보를 한눈에 볼 수 있는 장학금 통합 포털입니다.",
+    kind: "site",
+  },
+  {
+    id: "samsung_dream",
+    label: "삼성꿈장학재단",
+    url: "https://www.sdream.or.kr/",
+    summary:
+      "다양한 교육 소외계층 학생들에게 장학금과 멘토링 프로그램을 지원하는 국내 최대 규모 민간 장학재단입니다.",
+    kind: "site",
+  },
+  {
+    id: "bokjiro",
+    label: "복지로",
+    url: "https://www.bokjiro.go.kr/",
+    summary:
+      "대한민국 대표 복지포털로, 청년 주거급여, 청년월세지원 등 나에게 필요한 모든 복지 서비스를 찾고 신청할 수 있습니다.",
+    kind: "site",
+  },
+  {
+    id: "gw_youth",
+    label: "강원청년포털",
+    url: "https://job.gwd.go.kr/",
+    summary:
+      "강원특별자치도 청년들을 위한 일자리, 주거, 복지, 문화 등 분야별 맞춤형 청년 정책 정보를 통합 제공합니다.",
+    kind: "site",
+  },
+  {
+    id: "seoul_youth",
+    label: "청년몽땅정보통",
+    url: "https://youth.seoul.go.kr/",
+    summary:
+      "서울시 청년 정책의 모든 것. 청년수당, 대중교통비 지원, 역세권 청년주택 등 서울 청년을 위한 정보를 한곳에 모았습니다.",
+    kind: "site",
+  },
+  {
+    id: "k_startup",
+    label: "K-Startup",
+    url: "https://www.k-startup.go.kr/",
+    summary:
+      "예비창업패키지, 초기창업패키지 등 청년 창업가를 위한 정부 지원 사업과 교육, 공간 정보를 총망라한 창업 지원 포털입니다.",
+    kind: "site",
+  },
+  {
+    id: "gg_youth",
+    label: "잡아바(경기)",
+    url: "https://www.jobaba.net/",
+    summary:
+      "경기도 일자리재단이 운영하는 통합 플랫폼으로, 청년기본소득, 면접수당 등 경기도 청년 맞춤형 정책을 신청할 수 있습니다.",
+    kind: "site",
+  },
+  {
+    id: "busan_youth",
+    label: "부산청년플랫폼",
+    url: "https://www.busan.go.kr/young",
+    summary:
+      "부산 청년들을 위한 일자리, 주거, 문화, 복지 정책 정보를 제공하고 '청년디딤돌카드' 등 주요 사업 신청을 받습니다.",
+    kind: "site",
+  },
+  {
+    id: "incheon_youth",
+    label: "인천유스톡톡",
+    url: "https://www.chungbuk.go.kr/young",
+    summary:
+      "인천 청년들을 위한 취/창업 지원, 모임 공간 대관, 역량 강화 프로그램 등 다양한 청년 활동 지원 정보를 제공합니다.",
+    kind: "site",
+  },
+  {
+    id: "gwangju_youth",
+    label: "광주청년드림",
+    url: "https://youth.gwangju.go.kr/",
+    summary:
+      "광주 청년들의 구직 활동 수당, 청년 저축 계좌 등 자립과 성장을 돕는 맞춤형 청년 정책을 소개합니다.",
+    kind: "site",
+  },
+  {
+    id: "daejeon_youth",
+    label: "대전청년포털",
+    url: "https://www.daejeonyouthportal.kr/",
+    summary:
+      "대전 청년 취업 희망 카드, 주택 임차 보증금 이자 지원 등 대전시의 핵심 청년 지원 사업을 안내합니다.",
+    kind: "site",
+  },
+  {
+    id: "ulsan_youth",
+    label: "울산청년정책플랫폼",
+    url: "https://www.ulsan.go.kr/s/ulsanyouth/main.ulsan",
+    summary:
+      "울산 청년들을 위한 일자리, 주거, 복지 정책 정보와 'U-Dream' 등 지역 특화 청년 지원 사업을 확인할 수 있습니다.",
+    kind: "site",
+  },
+  {
+    id: "sejong_youth",
+    label: "세종청년플랫폼",
+    url: "https://www2.sejong.go.kr/youth/",
+    summary:
+      "세종시 청년들을 위한 정책, 공간, 문화 활동 정보를 통합 제공하며 청년 간의 소통을 지원하는 플랫폼입니다.",
+    kind: "site",
+  },
+  {
+    id: "jeju_youth",
+    label: "제주청년센터",
+    url: "https://jejuyouth.com/",
+    summary:
+      "제주 청년들의 역량 강화, 커뮤니티 활동, 취/창업 상담 등 제주 지역 청년 활동의 거점 역할을 하는 온라인 플랫폼입니다.",
+    kind: "site",
+  },
+  {
+    id: "cb_youth",
+    label: "충북청년포털",
+    url: "https://www.chungbuk.go.kr/young",
+    summary:
+      "충청북도 청년들을 위한 행복 결혼 공제, 학자금 대출 이자 지원 등 지역 맞춤형 청년 복지 정보를 제공합니다.",
+    kind: "site",
+  },
+  {
+    id: "cn_youth",
+    label: "충남청년포털",
+    url: "https://youth.chungnam.go.kr/",
+    summary:
+      "충청남도 청년들이 일자리·주거·복지·문화·정신건강 등 각종 청년 지원정책과 사업 정보를 한 번에 찾고 신청할 수 있는 종합 정보 사이트입니다.",
+    kind: "site",
+  },
+  {
+    id: "jb_youth",
+    label: "전북청년허브",
+    url: "https://www.jb2030.or.kr/",
+    summary:
+      "전라북도 청년 정책 통합 검색, 청년 공간 안내, 동아리 지원 등 전북 청년들의 활발한 활동을 지원합니다.",
+    kind: "site",
+  },
+  {
+    id: "gn_youth",
+    label: "경남청년정보플랫폼",
+    url: "https://youth.gyeongnam.go.kr/",
+    summary:
+      "경상남도 청년들을 위한 맞춤형 정책 검색 서비스와 청년 패스, 면접 정장 대여 등 실질적인 지원 혜택을 안내합니다.",
+    kind: "site",
+  },
+  {
+    id: "myhome",
+    label: "마이홈포털",
+    url: "https://www.myhome.go.kr/",
+    summary:
+      "국토교통부 주거 복지 포털로, 청년·신혼부부를 위한 주택 공급, 전·월세금 및 주거비 지원 등 각종 주거복지 정책을 한곳에서 조회하고 자가진단까지 할 수 있는 통합 안내 사이트입니다.",
+    kind: "site",
+  }
 ];
 
 function clamp(value, min, max) {
@@ -43,6 +211,25 @@ function isFiniteNumber(n) {
 
 function finiteOr(value, fallback) {
   return isFiniteNumber(value) ? value : fallback;
+}
+
+// 문자열 기반으로 0~1 사이의 안정적인 난수 값을 만들기(매 렌더/매 프레임마다 바뀌지 않게)
+function stableRand01(seed) {
+  const str = String(seed ?? "");
+  let h = 2166136261; // FNV-1a 32-bit
+  for (let i = 0; i < str.length; i += 1) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  // 0..1
+  return (h >>> 0) / 4294967295;
+}
+
+function clampAbs(v, maxAbs) {
+  if (!isFiniteNumber(v)) return 0;
+  const m = Math.abs(maxAbs);
+  if (!isFiniteNumber(m) || m <= 0) return v;
+  return clamp(v, -m, m);
 }
 
 function computeClampedCenterToKeepBboxInView(fg, width, height, paddingPx) {
@@ -80,7 +267,7 @@ function computeClampedCenterToKeepBboxInView(fg, width, height, paddingPx) {
   const curX = isFiniteNumber(curCenter?.x) ? curCenter.x : 0;
   const curY = isFiniteNumber(curCenter?.y) ? curCenter.y : 0;
 
-  // bbox가 뷰포트보다 크면(모두를 한 화면에 못 넣으면) bbox 중심으로 맞춥니다.
+  // bbox가 뷰포트보다 크면 bbox 중심으로.
   const viewportW = Math.max(0, halfW - padGX);
   const viewportH = Math.max(0, halfH - padGY);
 
@@ -150,13 +337,11 @@ function runBoundaryBounce({
 
 export default function PolicySitesGraph({
   sites = DEFAULT_SITE_CATALOG,
-  // 노드 간격을 넓히면 전체 bbox가 커져 초기 fit이 더 큰 줌아웃을 필요로 합니다.
-  // 그래서 minZoom을 너무 높게 잡지 않습니다(노드가 잘리는 문제 방지).
   minZoom = 0.35,
   maxZoom = 2.2,
 }) {
-  const containerRef = useRef(null); // React가 관리하는 래퍼(툴팁 포함)
-  const stageRef = useRef(null); // force-graph가 캔버스를 붙이는 전용 컨테이너(React 자식 없음)
+  const containerRef = useRef(null); // React가 관리하는 래퍼
+  const stageRef = useRef(null); // force-graph가 캔버스를 붙이는 전용 컨테이너
   const fgRef = useRef(null); // force-graph instance
   const timersRef = useRef({
     releaseFx: null,
@@ -192,10 +377,17 @@ export default function PolicySitesGraph({
       })),
     ];
 
-    const links = sites.map((s) => ({
-      source: HUB_ID,
-      target: s.id,
-    }));
+    // 링크 거리는 "랜덤"처럼 보이되, 매 프레임마다 바뀌면 어색하게 흔들립니다.
+    // 그래서 링크마다 한 번 계산한 값을 고정해서 사용합니다.
+    const links = sites.map((s) => {
+      const u = stableRand01(`${HUB_ID}->${s.id}`);
+      const linkDistance = 50 + u * 130; // 링크 길이
+      return {
+        source: HUB_ID,
+        target: s.id,
+        linkDistance,
+      };
+    });
 
     return { nodes, links };
   }, [sites]);
@@ -206,19 +398,21 @@ export default function PolicySitesGraph({
     didPostLayoutFitRef.current = false;
   }, [graphData]);
 
-  const neighborIds = useMemo(() => {
-    const set = new Set();
-    if (!hoverNode) return set;
-
-    const hoveredId = hoverNode.id;
+  // 호버로 인해 graph 설정(useEffect)이 다시 실행되며 시뮬레이션이 '재가열'되는 문제를 막기 위해,
+  // 이웃 관계는 "그래프 데이터 기준으로만" 한 번 계산해두고, 렌더링에서는 hoverNodeRef로만 판별합니다.
+  const adjacencyMap = useMemo(() => {
+    const map = new Map();
     for (const l of graphData.links) {
       const src = typeof l.source === "object" ? l.source.id : l.source;
       const tgt = typeof l.target === "object" ? l.target.id : l.target;
-      if (src === hoveredId) set.add(tgt);
-      if (tgt === hoveredId) set.add(src);
+      if (!src || !tgt) continue;
+      if (!map.has(src)) map.set(src, new Set());
+      if (!map.has(tgt)) map.set(tgt, new Set());
+      map.get(src).add(tgt);
+      map.get(tgt).add(src);
     }
-    return set;
-  }, [graphData.links, hoverNode]);
+    return map;
+  }, [graphData.links]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -248,16 +442,15 @@ export default function PolicySitesGraph({
   }, []);
 
   // force-graph 인스턴스는 "마운트 시 1회 생성/언마운트 시 1회 정리"로 유지합니다.
-  // React 자식(툴팁 등)과 캔버스 DOM이 섞이면 removeChild 충돌이 날 수 있어 stageRef로 분리합니다.
   useEffect(() => {
     if (!stageRef.current) return;
 
     const fg = ForceGraph()(stageRef.current)
       .backgroundColor("rgba(0,0,0,0)")
       .enableNodeDrag(true)
-      // 기본 pan 사용(일반적인 '잡고 끌기' 느낌). 카메라 느낌(역방향) 제거.
+      // 기본 pan 사용(일반적인 '잡고 끌기' 느낌)
       .enablePanInteraction(true)
-      // 확대/축소(휠/트랙패드/핀치) 인터랙션 비활성화: 공간(스케일) 고정
+      // 화면 고정
       .enableZoomInteraction(false);
 
     fgRef.current = fg;
@@ -290,9 +483,10 @@ export default function PolicySitesGraph({
       fg.minZoom(minZoom).maxZoom(maxZoom);
     }
 
-    // [수정] 렌더링 전에 물리 연산을 미리 수행하여 노드 위치를 잡습니다.
-    // 이렇게 하면 처음에 노드가 뭉쳐 있다가 퍼지는 과정 없이 바로 정돈된 상태로 나옵니다.
-    fg.cooldownTicks(100);
+    // [수정] 이전에는 cooldownTicks(100) 때문에 시뮬레이션이 "한 번씩 멈추는" 현상이 있었습니다.
+    // 멈추지 않고 계속 자연스럽게 떠다니게 하려면 cooldown을 무한으로 두는 게 안전합니다.
+    fg.cooldownTicks(Infinity);
+    fg.cooldownTime(Infinity);
 
     fg.graphData(graphData);
 
@@ -303,39 +497,58 @@ export default function PolicySitesGraph({
     // - 링크 거리 증가
     // - 감쇠를 낮춰(관성↑) 너무 빨리 복원되는 느낌 완화
     try {
-      fg.d3VelocityDecay(0.22);
+      fg.d3VelocityDecay(0.05);
 
       const charge = fg.d3Force("charge");
-      // 노드 간 거리(퍼짐)를 "약간" 줄이기 위해 반발을 조금 완화
-      if (charge?.strength) charge.strength(-190);
-      if (charge?.distanceMin) charge.distanceMin(24);
-      if (charge?.distanceMax) charge.distanceMax(900);
+      
+      if (charge?.strength) charge.strength(-800); // 노드 간 반발력
+      if (charge?.distanceMin) charge.distanceMin(50);
+      if (charge?.distanceMax) charge.distanceMax(2000);
 
       const link = fg.d3Force("link");
-      // 링크 거리도 소폭 감소(허브-사이트 / 사이트-사이트)
-      if (link?.distance)
-        link.distance((l) =>
-          l?.source?.id === HUB_ID || l?.target?.id === HUB_ID ? 128 : 109
-        );
-      if (link?.strength) link.strength(1);
+      // 링크 거리: 링크마다 고정된 랜덤값(linkDistance)을 사용 (매 프레임 랜덤 금지)
+      if (link?.distance) link.distance((l) => l?.linkDistance ?? 160);
+      if (link?.strength) link.strength(0.8); // 텐션을 살짝 낮춰서 자연스럽게
+
+      // 충돌 방지 포스 추가 (노드 반지름보다 살짝 크게)
+      fg.d3Force("collide", (node) => {
+        const r = node.kind === "hub" ? 40 : 25; 
+        return r * 1.5; // 여유 공간
+      });
+
     } catch {
       // force 옵션이 환경에 따라 다를 수 있어 방어
     }
 
-    fg.linkColor(() =>
-      hoverNode ? "rgba(191, 219, 254, 0.22)" : "rgba(148, 163, 184, 0.18)"
-    );
-    fg.linkWidth((link) => {
-      if (!hoverNode) return 1;
+    // 링크 스타일은 함수로 등록해 두고(hoverNodeRef 기반), 호버 시에는 "리렌더만" 트리거합니다.
+    // 이렇게 하면 hover로 인해 이 effect가 다시 실행되지 않아, 엔진이 다시 '꿈틀'거리지 않습니다.
+    fg.linkColor((link) => {
+      const hoveredId = hoverNodeRef.current?.id;
+      if (!hoveredId) return "rgba(148, 163, 184, 0.18)";
       const src = typeof link.source === "object" ? link.source.id : link.source;
       const tgt = typeof link.target === "object" ? link.target.id : link.target;
-      const hoveredId = hoverNode.id;
+      const isAdjacent = src === hoveredId || tgt === hoveredId;
+      return isAdjacent ? "rgba(191, 219, 254, 0.28)" : "rgba(148, 163, 184, 0.08)";
+    });
+    fg.linkWidth((link) => {
+      const hoveredId = hoverNodeRef.current?.id;
+      if (!hoveredId) return 1;
+      const src = typeof link.source === "object" ? link.source.id : link.source;
+      const tgt = typeof link.target === "object" ? link.target.id : link.target;
       const isAdjacent = src === hoveredId || tgt === hoveredId;
       return isAdjacent ? 2 : 1;
     });
+
     fg.onNodeHover((node) => {
       hoverNodeRef.current = node || null;
       setHoverNode(node || null);
+
+      if (containerRef.current) {
+        containerRef.current.style.cursor = node ? "pointer" : "default";
+      }
+
+      // 호버로 스타일만 바뀌도록 캔버스만 갱신 (엔진 재가열 X)
+      fg.refresh?.();
     });
     fg.onNodeClick((node) => {
       if (!node?.url) return;
@@ -398,48 +611,46 @@ export default function PolicySitesGraph({
         const x = finiteOr(node.x, 0);
         const y = finiteOr(node.y, 0);
 
-        const isHovered = hoverNode?.id === node.id;
-        const isNeighbor = neighborIds.has(node.id);
-        // 노드 크기 상향(가독성↑)
-        const baseR = node.kind === "hub" ? 28 : 20;
-        const r = isHovered ? baseR * 1.35 : isNeighbor ? baseR * 1.15 : baseR;
+        const hoveredId = hoverNodeRef.current?.id;
+        const isHovered = hoveredId === node.id;
+        const neighborSet = hoveredId ? adjacencyMap.get(hoveredId) : null;
+        const isNeighbor = !!neighborSet && neighborSet.has(node.id);
+        
+        // 노드 크기 조정 (Hub는 크게, Site는 작게)
+        const baseR = node.kind === "hub" ? 36 : 14; 
+        const r = isHovered ? baseR * 1.4 : isNeighbor ? baseR * 1.2 : baseR;
 
         if (!isFiniteNumber(r) || r <= 0) return;
 
         // --- iOS Style Design ---
 
         // 1. Gradients & Shadows
-        // 상단-좌측에서 하단-우측으로 떨어지는 부드러운 그라데이션
         const gradient = ctx.createLinearGradient(x - r, y - r, x + r, y + r);
 
         if (node.kind === "hub") {
-          // Hub: iOS Blue (San Francisco Blue 느낌)
-          // Hover 시 조금 더 밝고 채도 높게
           if (isHovered) {
             gradient.addColorStop(0, "#60A5FA"); // Blue-400
             gradient.addColorStop(1, "#2563EB"); // Blue-600
-            ctx.shadowColor = "rgba(37, 99, 235, 0.5)"; // Blue glow shadow
+            ctx.shadowColor = "rgba(37, 99, 235, 0.6)"; 
           } else {
             gradient.addColorStop(0, "#93C5FD"); // Blue-300
             gradient.addColorStop(1, "#3B82F6"); // Blue-500
-            ctx.shadowColor = "rgba(0, 0, 0, 0.2)"; // Natural shadow
+            ctx.shadowColor = "rgba(0, 0, 0, 0.25)"; 
           }
         } else {
-          // Site: iOS System Gray / White (깔끔한 앱 아이콘 배경색)
+          // Site: 깔끔한 화이트/그레이
           if (isHovered) {
             gradient.addColorStop(0, "#FFFFFF");
-            gradient.addColorStop(1, "#F1F5F9"); // Slate-100
-            ctx.shadowColor = "rgba(255, 255, 255, 0.4)"; // White glow
+            gradient.addColorStop(1, "#F1F5F9"); 
+            ctx.shadowColor = "rgba(255, 255, 255, 0.5)"; 
           } else {
-            gradient.addColorStop(0, "#F8FAFC"); // Slate-50
-            gradient.addColorStop(1, "#CBD5E1"); // Slate-300
+            gradient.addColorStop(0, "#F8FAFC"); 
+            gradient.addColorStop(1, "#E2E8F0"); 
             ctx.shadowColor = "rgba(0, 0, 0, 0.15)";
           }
         }
 
-        // Drop Shadow (Elevation)
-        // iOS: 부드럽고 넓게 퍼지는 그림자로 깊이감 표현
-        ctx.shadowBlur = isHovered ? 16 : 8;
+        ctx.shadowBlur = isHovered ? 20 : 8;
         ctx.shadowOffsetY = isHovered ? 6 : 3;
 
         // 2. Main Circle
@@ -448,38 +659,39 @@ export default function PolicySitesGraph({
         ctx.fillStyle = gradient;
         ctx.fill();
 
-        // 3. Subtle Inner Highlight (Top Reflection)
-        // 위쪽에 살짝 맺히는 빛으로 볼륨감(Convex) 표현
-        ctx.shadowColor = "transparent"; // 그림자 끄고 하이라이트만
+        // 3. Subtle Inner Highlight
+        ctx.shadowColor = "transparent"; 
         ctx.shadowBlur = 0;
         ctx.shadowOffsetY = 0;
 
         const highlightGrad = ctx.createLinearGradient(x, y - r, x, y);
-        highlightGrad.addColorStop(0, "rgba(255, 255, 255, 0.35)");
-        highlightGrad.addColorStop(0.5, "rgba(255, 255, 255, 0.05)");
+        highlightGrad.addColorStop(0, "rgba(255, 255, 255, 0.4)");
+        highlightGrad.addColorStop(0.5, "rgba(255, 255, 255, 0.1)");
         highlightGrad.addColorStop(1, "rgba(255, 255, 255, 0)");
 
         ctx.beginPath();
-        ctx.arc(x, y, r, 0, 2 * Math.PI, false); // 전체 덮되 그라데이션으로 상단만 보이게
+        ctx.arc(x, y, r, 0, 2 * Math.PI, false); 
         ctx.fillStyle = highlightGrad;
         ctx.fill();
 
-        // 4. Label
+        // 4. Label (Spacing Improved)
         const label = node.label ?? String(node.id);
-        const fontSize = clamp(12 / globalScale, 14, 18);
-        // iOS 시스템 폰트 스택
+        // 폰트는 줌아웃 시 조금 더 작게 보이도록 조정
+        const fontSize = clamp(12 / globalScale, 12, 16); 
+        
         ctx.font = `600 \${fontSize}px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Helvetica, Arial, sans-serif`;
-
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
 
-        // 텍스트 가독성: 배경이 어두우므로 밝은 색 + 부드러운 그림자
-        ctx.shadowColor = "rgba(0, 0, 0, 0.4)";
-        ctx.shadowBlur = 3;
+        // 텍스트 스타일: 가독성 확보
+        ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
+        ctx.shadowBlur = 4;
         ctx.shadowOffsetY = 1;
         ctx.fillStyle = "#FFFFFF";
 
-        ctx.fillText(label, x, y + r + 6 / globalScale);
+        // 노드 아래 여백을 줌 레벨에 따라 동적으로 (겹침 방지)
+        const textY = y + r + (6 / globalScale);
+        ctx.fillText(label, x, textY);
 
         // Reset
         ctx.shadowColor = "transparent";
@@ -548,7 +760,7 @@ export default function PolicySitesGraph({
     }, 50);
 
     return () => clearTimeout(fitTimer);
-  }, [graphData, hoverNode, neighborIds, minZoom, maxZoom]);
+  }, [graphData, adjacencyMap, minZoom, maxZoom]);
 
   const handleMouseMove = (e) => {
     if (!containerRef.current) return;
