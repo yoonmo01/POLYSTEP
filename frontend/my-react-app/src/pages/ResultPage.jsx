@@ -320,17 +320,22 @@ function ResultPage() {
   const handleVerify = () => {
     if (!selected) return;
     if (isVerifying) return;
+    const policyId = getPolicyId(selected);
+    if (!policyId) {
+      pushLog("❌ policy_id를 찾을 수 없습니다. (selected.id/policy_id 확인 필요)");
+      return;
+    }
 
     setIsVerifying(true);
     setVerifyLogs([]);
     setLiveImageB64("");
     setFinalUrl("");
 
-    pushLog(`검증 시작: "${selected.title}" (policy_id=${selected.policy_id})`);
+    pushLog(`검증 시작: "${selected.title}" (policy_id=${policyId})`);
 
     const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
     const wsBase = API_BASE.replace("http://", "ws://").replace("https://", "wss://");
-    const wsUrl = `${wsBase}/policies/ws/${selected.policy_id}/verify`;
+    const wsUrl = `${wsBase}/policies/ws/${policyId}/verify`;
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
@@ -364,7 +369,7 @@ function ResultPage() {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                policy_id: selected?.policy_id,
+                policy_id: policyId,
                 verification_id: data.verification_id ?? null,
                 scholarship: selectedScholarship || null,
               }),
@@ -430,11 +435,11 @@ function ResultPage() {
               type="button"
               className="result-next-btn"
               onClick={() =>
-                navigate(`/final/${selected?.policy_id}`, {
+                navigate(`/final/${getPolicyId(selected) ?? ""}`, {
                   state: { selectedScholarship },
                 })
               }
-              disabled={!selected}
+              disabled={!selected || !getPolicyId(selected)}
             >
               POLYSTEP Final Report →
             </button>

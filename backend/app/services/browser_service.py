@@ -3,22 +3,38 @@
 import asyncio
 import json
 import logging
-import time
+import inspect
 import os
 import re
 import base64
 import sys
-import threading
-from concurrent.futures import ThreadPoolExecutor
+import time
+from collections import deque
 from datetime import datetime, timezone
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 from typing import Any, Dict, List, Optional, Callable, Awaitable, Set, Tuple
-from urllib.parse import urljoin
 
 import httpx
 from dotenv import load_dotenv, find_dotenv
 
 from browser_use import Agent, Browser, ChatGoogle
+
+# ✅ (추가) JSON이 아닌 텍스트 최종결과(정책 못 찾음 등) 복구용 휴리스틱
+_NOT_FOUND_HINTS = [
+    "could not be found",
+    "cannot be found",
+    "not be found",
+    "no matching data",
+    "no data available",
+    "자료가 없습니다",
+    "조회된",
+    "없습니다",
+]
+_JUDGE_FAIL_HINTS = [
+    "Judge Verdict: ❌ FAIL",
+    "Failure Reason:",
+    "⚖️  Judge Verdict",
+]
 
 # ✅ browser-use 버전에 따라 Controller가 없을 수 있음
 try:
@@ -65,12 +81,18 @@ logger.info(
 AsyncLogCallback = Optional[Callable[[str], Awaitable[None]]]
 AsyncScreenshotCallback = Optional[Callable[[str], Awaitable[None]]]
 
-_SCREENSHOT_TIMEOUT_RE = re.compile(r"ScreenshotWatchdog\.on_ScreenshotEvent.*timed out", re.IGNORECASE)
+_SCREENSHOT_TIMEOUT_RE = re.compile(
+    r"ScreenshotWatchdog\.on_ScreenshotEvent.*timed out", re.IGNORECASE
+)
 _DOMWATCHDOG_SCREENSHOT_FAIL_RE = re.compile(r"Clean screenshot failed", re.IGNORECASE)
+
 
 def _is_browser_snapshot_timeout(e: Exception) -> bool:
     msg = f"{type(e).__name__}: {e}"
-    return bool(_SCREENSHOT_TIMEOUT_RE.search(msg) or _DOMWATCHDOG_SCREENSHOT_FAIL_RE.search(msg))
+    return bool(
+        _SCREENSHOT_TIMEOUT_RE.search(msg) or _DOMWATCHDOG_SCREENSHOT_FAIL_RE.search(msg)
+    )
+
 
 def _normalize_url(raw: Optional[str]) -> str:
     """
@@ -87,15 +109,16 @@ def _normalize_url(raw: Optional[str]) -> str:
         s = "https://" + s
     try:
         p = urlparse(s)
-        # host가 비어있으면 잘못된 URL일 가능성 → 그대로 반환(후속에서 에러로 잡히게)
         if not p.netloc:
             return s
     except Exception:
         return s
     return s
 
+
 def _env_flag(name: str, default: str = "false") -> bool:
     return os.getenv(name, default).lower() in ("1", "true", "yes", "y", "on")
+
 
 def _env_int(name: str, default: int = 0) -> int:
     try:
@@ -103,11 +126,8 @@ def _env_int(name: str, default: int = 0) -> int:
     except Exception:
         return default
 
+
 def _is_overload_error(e: Exception) -> bool:
-    """
-    Gemini/Provider 503(오버로드) 류를 문자열 기반으로 감지.
-    (라이브러리 예외 타입이 버전마다 달라서 안전하게 문자열로 체크)
-    """
     msg = f"{type(e).__name__}: {e}"
     return (
         ("503" in msg)
@@ -116,24 +136,15 @@ def _is_overload_error(e: Exception) -> bool:
         or ("overloaded" in msg.lower())
     )
 
+
 def _normalize_text_for_windows(text: str) -> str:
-    """
-    Windows 콘솔(cp949)에서 터지는 문자(특히 NBSP \xa0 등)를 완화.
-    """
     return (text or "").replace("\u00a0", " ").replace("\u200b", " ").strip()
 
 
 # ============================================================
 # ✅ (추가) logging -> WebSocket(log_callback) 브릿지
-#   - Agent/BrowserSession/tools 로그가 콘솔에만 찍히던 것을
-#     WS로도 스트리밍해서 프론트에서 실시간으로 보이게 함
 # ============================================================
 class _WSQueueLogHandler(logging.Handler):
-    """
-    logging.Handler는 emit이 sync라서,
-    emit에서는 asyncio.Queue에만 넣고,
-    실제 WS 전송은 async pump가 수행한다.
-    """
     def __init__(self, loop: asyncio.AbstractEventLoop, q: "asyncio.Queue[str]"):
         super().__init__()
         self._loop = loop
@@ -146,11 +157,11 @@ class _WSQueueLogHandler(logging.Handler):
         except Exception:
             pass
 
+
 class _WSStream:
-    """
-    print()/stdout/stderr 로 나오는 출력도 WebSocket(log_callback)로 흘려보내기 위한 스트림.
-    """
-    def __init__(self, loop: asyncio.AbstractEventLoop, q: "asyncio.Queue[str]", prefix: str = ""):
+    def __init__(
+        self, loop: asyncio.AbstractEventLoop, q: "asyncio.Queue[str]", prefix: str = ""
+    ):
         self._loop = loop
         self._q = q
         self._prefix = prefix
@@ -172,24 +183,276 @@ class _WSStream:
         if line:
             self._loop.call_soon_threadsafe(self._q.put_nowait, line)
         self._buf = ""
+
     @property
     def encoding(self) -> str:
-        # 일부 라이브러리가 sys.stdout.encoding을 조회하는 경우 대비
         return "utf-8"
 
     @property
     def errors(self) -> str:
         return "replace"
 
+
+# ============================================================
+# ✅ (핵심) "파일 감시" 대신, Playwright 페이지를 직접 캡처해서 WS로 스트리밍
+# ============================================================
+def _is_page_like(obj: Any) -> bool:
+    """
+    Playwright Page 유사 객체인지 휴리스틱으로 판별.
+    - page.screenshot() (async) 존재
+    - page.url 또는 page.goto 존재
+    """
+    if obj is None:
+        return False
+    try:
+        shot = getattr(obj, "screenshot", None)
+        if callable(shot):
+            if hasattr(obj, "goto") or hasattr(obj, "url") or hasattr(obj, "_url"):
+                return True
+    except Exception:
+        return False
+    return False
+
+
+def _deep_find_page_like(root: Any, max_depth: int = 4, max_nodes: int = 400) -> Any:
+    """
+    browser-use 내부 구조가 버전별로 달라서,
+    알려진 attribute path로 못 찾을 때 딥 스캔으로 Page-like 객체를 찾는다.
+    - 너무 깊게/많이 탐색하면 느려질 수 있어 제한을 둠.
+    """
+    if root is None:
+        return None
+
+    seen: Set[int] = set()
+    q: "deque[Tuple[Any, int]]" = deque([(root, 0)])
+    n = 0
+
+    while q and n < max_nodes:
+        cur, depth = q.popleft()
+        n += 1  # ✅ FIX: n = 1 이 아니라 누적 증가해야 함
+
+        if cur is None:
+            continue
+
+        try:
+            oid = id(cur)
+            if oid in seen:
+                continue
+            seen.add(oid)
+        except Exception:
+            pass
+
+        try:
+            if _is_page_like(cur):
+                return cur
+        except Exception:
+            pass
+
+        if depth >= max_depth:
+            continue
+
+        # dict
+        if isinstance(cur, dict):
+            for v in list(cur.values())[:60]:
+                if v is not None:
+                    q.append((v, depth + 1))
+            continue
+
+        # list/tuple/set
+        if isinstance(cur, (list, tuple, set)):
+            for v in list(cur)[:60]:
+                if v is not None:
+                    q.append((v, depth + 1))
+            continue
+
+        # 일반 객체: __dict__ 우선 + dir() 제한적으로
+        try:
+            d = getattr(cur, "__dict__", None)
+            if isinstance(d, dict):
+                for _, v in list(d.items())[:120]:
+                    if v is None:
+                        continue
+                    if isinstance(v, (str, int, float, bool, bytes)):
+                        continue
+                    q.append((v, depth + 1))
+        except Exception:
+            pass
+
+        # dir()로 보강 (너무 무겁지 않게 제한)
+        try:
+            for name in dir(cur)[:120]:
+                if name.startswith("__"):
+                    continue
+                if name in ("_loop", "_logger"):
+                    continue
+                try:
+                    v = getattr(cur, name, None)
+                except Exception:
+                    continue
+                if v is None:
+                    continue
+                if inspect.isfunction(v) or inspect.ismodule(v) or inspect.isclass(v):
+                    continue
+                if isinstance(v, (str, int, float, bool, bytes)):
+                    continue
+                q.append((v, depth + 1))
+        except Exception:
+            pass
+
+    return None
+
+
+def _try_get_playwright_page(browser: Any) -> Any:
+    """
+    ✅ browser-use Browser 객체에서 Playwright Page를 최대한 안전하게 찾아온다.
+    (버전/내부구조 차이를 고려해 여러 경로를 시도)
+    """
+    candidates = [
+        ("page",),
+        ("_page",),
+        ("browser_session", "page"),
+        ("browser_session", "_page"),
+        ("_browser_session", "page"),
+        ("_browser_session", "_page"),
+        ("session", "page"),
+        ("_session", "page"),
+        ("manager", "page"),
+        ("_manager", "page"),
+        ("playwright_page",),
+        ("_playwright_page",),
+        # browser-use 내부에서 자주 보이는 이름들(버전차 대응)
+        ("_browser", "contexts"),
+        ("_browser",),
+        ("_context",),
+        ("context",),
+    ]
+
+    for path in candidates:
+        cur = browser
+        ok = True
+        for key in path:
+            if cur is None:
+                ok = False
+                break
+            cur = getattr(cur, key, None)
+
+        if not ok or cur is None:
+            continue
+
+        # contexts/pages 경로로 들어온 경우 처리
+        try:
+            if isinstance(cur, list) and cur:
+                ctx = cur[-1]
+                pages = getattr(ctx, "pages", None)
+                if pages:
+                    return pages[-1]
+            if _is_page_like(cur):
+                return cur
+        except Exception:
+            pass
+
+    # context.pages 우회
+    ctx = getattr(browser, "context", None) or getattr(browser, "_context", None)
+    if ctx is not None:
+        try:
+            pages = getattr(ctx, "pages", None)
+            if pages:
+                return pages[-1]
+        except Exception:
+            pass
+
+    # ✅ 마지막 우회: 딥 스캔(버전/내부 구조 상이 대응)
+    try:
+        found = _deep_find_page_like(browser, max_depth=4, max_nodes=400)
+        if found is not None:
+            return found
+    except Exception:
+        pass
+
+    return None
+
+
+async def _pump_live_screenshots(
+    browser: Any,
+    screenshot_callback: AsyncScreenshotCallback,
+    log_callback: AsyncLogCallback = None,
+    interval_sec: float = 0.5,
+    jpeg_quality: int = 55,
+    max_bytes: int = 900_000,
+) -> None:
+    """
+    ✅ 파일 저장 없이, page.screenshot()을 직접 찍어 WS로 스트리밍.
+    - JPEG로 용량을 줄여 프론트 렌더/전송 안정성 확보
+    """
+    if not screenshot_callback:
+        return
+
+    page = None
+    last_warn = 0.0
+
+    while True:
+        try:
+            if page is None:
+                page = _try_get_playwright_page(browser)
+                if page is None:
+                    now = time.time()
+                    if log_callback and (now - last_warn > 2.0):
+                        await log_callback(
+                            "⚠️ live screenshot: Playwright page를 아직 못 찾았습니다(재시도 중)..."
+                        )
+                        last_warn = now
+                    await asyncio.sleep(0.2)
+                    continue
+
+            # ✅ screenshot이 내부적으로 hang/timeout 나는 케이스가 있어서 타임아웃으로 감싼다
+            buf = await asyncio.wait_for(
+                page.screenshot(type="jpeg", quality=jpeg_quality, full_page=False),
+                timeout=6.0,
+            )
+            if buf and len(buf) <= max_bytes:
+                b64 = base64.b64encode(buf).decode("utf-8")
+                await screenshot_callback(b64)
+            else:
+                if log_callback and buf:
+                    await log_callback(
+                        f"⚠️ live screenshot too large, skip ({len(buf)} bytes)"
+                    )
+
+            await asyncio.sleep(interval_sec)
+
+        except asyncio.CancelledError:
+            return
+        except asyncio.TimeoutError:
+            page = None
+            if log_callback:
+                try:
+                    await log_callback(
+                        "⚠️ live screenshot timeout(재시도): page.screenshot timed out"
+                    )
+                except Exception:
+                    pass
+            await asyncio.sleep(0.4)
+        except Exception as e:
+            page = None
+            if log_callback:
+                try:
+                    await log_callback(f"⚠️ live screenshot error(재시도): {e}")
+                except Exception:
+                    pass
+            await asyncio.sleep(0.3)
+
+
+# ============================================================
+# ✅ HTML 이미지 URL 추출(기존 유지)
+# ============================================================
 _IMG_SRC_RE = re.compile(r"""<img[^>]+src\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
 _OG_IMAGE_RE = re.compile(
     r"""<meta[^>]+property\s*=\s*["']og:image["'][^>]+content\s*=\s*["']([^"']+)["']""",
     re.IGNORECASE,
 )
 _A_HREF_RE = re.compile(r"""<a[^>]+href\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
-
-# 이미지 URL로 볼 확장자 (첨부/바로보기 링크가 jpg로 직접 걸린 케이스 대응)
 _IMG_EXT_RE = re.compile(r"""\.(?:png|jpe?g|gif|webp)(?:\?.*)?$""", re.IGNORECASE)
+
 
 def _dedup_keep_order(items: List[str]) -> List[str]:
     out: List[str] = []
@@ -204,10 +467,10 @@ def _dedup_keep_order(items: List[str]) -> List[str]:
         out.append(s)
     return out
 
+
 async def _fetch_html(url: str, timeout_sec: float = 10.0) -> str:
     if not url:
         return ""
-    # ✅ 안전장치: 어떤 호출 경로로 와도 scheme 없는 URL 방지
     url = _normalize_url(url)
     try:
         async with httpx.AsyncClient(
@@ -220,26 +483,23 @@ async def _fetch_html(url: str, timeout_sec: float = 10.0) -> str:
         logger.warning("[BrowserService] HTML fetch failed url=%s err=%s", url, e)
         return ""
 
+
 def _extract_image_urls_from_html(html: str, base_url: str, limit: int = 30) -> List[str]:
     if not html:
         return []
     found: List[str] = []
 
-    # og:image 우선
     for m in _OG_IMAGE_RE.finditer(html):
         found.append(urljoin(base_url, (m.group(1) or "").strip()))
 
-    # img src
     for m in _IMG_SRC_RE.finditer(html):
         src = (m.group(1) or "").strip()
         if not src:
             continue
-        # data:는 너무 크고 OCR 대상일 때도 처리 난이도 ↑ → 제외
         if src.lower().startswith("data:"):
             continue
         found.append(urljoin(base_url, src))
 
-    # ✅ a href 로 직접 걸린 이미지(첨부 jpg / 카드뉴스 파일 링크)도 수집
     for m in _A_HREF_RE.finditer(html):
         href = (m.group(1) or "").strip()
         if not href:
@@ -253,18 +513,13 @@ def _extract_image_urls_from_html(html: str, base_url: str, limit: int = 30) -> 
     found = _dedup_keep_order(found)
     return found[: max(0, limit)]
 
+
 async def _enrich_image_urls_via_related_pages(
     entry_url: str,
     base_image_urls: List[str],
     max_image_urls: int = 30,
     max_related_pages: int = 3,
 ) -> List[str]:
-    """
-    ✅ "바로보기/원문보기/첨부"처럼 별도 뷰어 페이지를 여는 사이트 대응:
-    - entry_url HTML에서 이미지 URL을 수집하고,
-    - 추가로 '관련 링크' 몇 개를 골라(fetch) 그 안의 이미지 URL도 수집
-    - 최종적으로 URL만 반환 (이미지 파일 다운로드는 여기서 하지 않음)
-    """
     if not entry_url:
         return _dedup_keep_order(base_image_urls)[:max_image_urls]
 
@@ -273,7 +528,6 @@ async def _enrich_image_urls_via_related_pages(
     html = await _fetch_html(entry_url, timeout_sec=10.0)
     urls.extend(_extract_image_urls_from_html(html, entry_url, limit=max_image_urls))
 
-    # 관련 페이지 후보 링크 수집
     candidates: List[str] = []
     for m in _A_HREF_RE.finditer(html or ""):
         href = (m.group(1) or "").strip()
@@ -288,11 +542,23 @@ async def _enrich_image_urls_via_related_pages(
             continue
 
         low = abs_url.lower()
-        if any(k in low for k in ("amode=view", "view", "preview", "viewer", "attach", "download", "file", "atch", "origin")):
+        if any(
+            k in low
+            for k in (
+                "amode=view",
+                "view",
+                "preview",
+                "viewer",
+                "attach",
+                "download",
+                "file",
+                "atch",
+                "origin",
+            )
+        ):
             candidates.append(abs_url)
 
-    candidates = _dedup_keep_order(candidates)
-    candidates = candidates[: max_related_pages]
+    candidates = _dedup_keep_order(candidates)[: max_related_pages]
 
     for u in candidates:
         if _IMG_EXT_RE.search(u):
@@ -303,10 +569,10 @@ async def _enrich_image_urls_via_related_pages(
 
     return _dedup_keep_order(urls)[:max_image_urls]
 
-# ============================================================
-# ✅ 후처리(Validation + Repair) 유틸
-# ============================================================
 
+# ============================================================
+# ✅ 후처리(Validation + Repair) 유틸 (기존 유지)
+# ============================================================
 _PHONE_RE = re.compile(r"(?:\+82[-\s]?)?0\d{1,2}[-\s]?\d{3,4}[-\s]?\d{4}")
 _LIKELY_ADDRESS_RE = re.compile(
     r"(?:\b(?:도로|로|길)\s*\d+\b)|(?:\b\d+\s*번지\b)|(?:\b(?:읍|면|동|리)\b)|(?:\b(?:시|군|구)\b)"
@@ -319,23 +585,15 @@ _AGE_HINT_RE = re.compile(
     r"|(만\s*\d{1,2}\s*세\s*~\s*만\s*\d{1,2}\s*세)"
     r"|(\d{1,2}\s*세\s*(?:이상|이하))"
 )
-NONE_VALUES: Set[str] = {
-    "없음",
-    "없습니다",
-    "해당 없음",
-    "해당없음",
-    "무관",
-    "미해당",
-    "-",
-    "x",
-    "X",
-}
+NONE_VALUES: Set[str] = {"없음", "없습니다", "해당 없음", "해당없음", "무관", "미해당", "-", "x", "X"}
+
 
 def _norm_none_or_str(v: Any) -> Optional[str]:
     if v is None:
         return None
     s = str(v).strip()
     return s if s else None
+
 
 def _normalize_none_value(value: Any, default: str = "제한 없음") -> str:
     s = (_norm_none_or_str(value) or "").strip()
@@ -344,6 +602,7 @@ def _normalize_none_value(value: Any, default: str = "제한 없음") -> str:
     if s.lower() in ("none", "n/a"):
         return default
     return default if s in NONE_VALUES else s
+
 
 def _extract_field_line(evidence_text: str, field_name: str) -> Optional[str]:
     if not evidence_text:
@@ -355,6 +614,7 @@ def _extract_field_line(evidence_text: str, field_name: str) -> Optional[str]:
     if m2:
         return m2.group(1).strip()
     return None
+
 
 def _merge_region_from_evidence(criteria_region: Optional[str], evidence_text: str) -> Optional[str]:
     ev = _extract_field_line(evidence_text, "지역기준")
@@ -368,6 +628,7 @@ def _merge_region_from_evidence(criteria_region: Optional[str], evidence_text: s
     if ("|" in ev) and ("|" not in cur):
         return ev
     return criteria_region
+
 
 def _clean_required_documents(items: Any) -> List[str]:
     if not isinstance(items, list):
@@ -402,13 +663,13 @@ def _clean_required_documents(items: Any) -> List[str]:
             dedup.append(x)
     return dedup
 
+
 def _infer_age_from_evidence(evidence_text: str) -> Optional[str]:
     if not evidence_text:
         return None
     m = _AGE_HINT_RE.search(evidence_text)
-    if not m:
-        return None
-    return m.group(0).strip()
+    return m.group(0).strip() if m else None
+
 
 def _normalize_apply_channel(v: Any) -> Optional[str]:
     s = _norm_none_or_str(v)
@@ -429,9 +690,11 @@ def _normalize_apply_channel(v: Any) -> Optional[str]:
         return "우편"
     return s
 
+
 def _clean_documents(result: Dict[str, Any]) -> Dict[str, Any]:
     result["required_documents"] = _clean_required_documents(result.get("required_documents"))
     return result
+
 
 def _fix_criteria_mapping(result: Dict[str, Any]) -> Dict[str, Any]:
     criteria = result.get("criteria") or {}
@@ -466,9 +729,11 @@ def _fix_criteria_mapping(result: Dict[str, Any]) -> Dict[str, Any]:
     result["criteria"] = criteria
     return result
 
+
 def _normalize_fields(result: Dict[str, Any]) -> Dict[str, Any]:
     result["apply_channel"] = _normalize_apply_channel(result.get("apply_channel"))
     return result
+
 
 def _enrich_contact(result: Dict[str, Any]) -> Dict[str, Any]:
     evidence = _norm_none_or_str(result.get("evidence_text")) or ""
@@ -482,6 +747,7 @@ def _enrich_contact(result: Dict[str, Any]) -> Dict[str, Any]:
     result["contact"] = contact
     return result
 
+
 def _repair_result(result: Dict[str, Any]) -> Dict[str, Any]:
     result = _clean_documents(result)
     result = _fix_criteria_mapping(result)
@@ -489,85 +755,18 @@ def _repair_result(result: Dict[str, Any]) -> Dict[str, Any]:
     result = _enrich_contact(result)
     return result
 
+
 def _list_files_safe(dirpath: str) -> Set[str]:
     try:
         return set(os.listdir(dirpath))
     except Exception:
         return set()
 
-def _is_image_file(fn: str) -> bool:
-    low = (fn or "").lower()
-    return low.endswith(".png") or low.endswith(".jpg") or low.endswith(".jpeg") or low.endswith(".webp")
-
-def _pick_latest_image_file(dirpath: str) -> Optional[Tuple[str, float]]:
-    try:
-        candidates: List[Tuple[str, float]] = []
-        for fn in os.listdir(dirpath):
-            if not _is_image_file(fn):
-                continue
-            full = os.path.join(dirpath, fn)
-            try:
-                mtime = os.path.getmtime(full)
-                candidates.append((full, mtime))
-            except Exception:
-                continue
-        if not candidates:
-            return None
-        candidates.sort(key=lambda x: x[1], reverse=True)
-        return candidates[0]
-    except Exception:
-        return None
-
-async def _pump_latest_screenshot_file(
-    downloads_dir: str,
-    screenshot_callback: AsyncScreenshotCallback,
-    log_callback: AsyncLogCallback = None,
-    interval_sec: float = 0.7,
-    max_bytes: int = 2_500_000,
-) -> None:
-    if not screenshot_callback:
-        return
-
-    last_sent_path: Optional[str] = None
-    last_sent_mtime: float = 0.0
-
-    while True:
-        try:
-            latest = _pick_latest_image_file(downloads_dir)
-            if latest:
-                path, mtime = latest
-                if (path != last_sent_path) or (mtime > last_sent_mtime):
-                    try:
-                        size = os.path.getsize(path)
-                    except Exception:
-                        size = 0
-                    if size and size > max_bytes:
-                        if log_callback:
-                            await log_callback(f"스크린샷 파일이 너무 커서 스킵: {os.path.basename(path)} ({size} bytes)")
-                    else:
-                        try:
-                            with open(path, "rb") as f:
-                                buf = f.read()
-                            b64 = base64.b64encode(buf).decode("utf-8")
-                            await screenshot_callback(b64)
-                            last_sent_path = path
-                            last_sent_mtime = mtime
-                        except Exception as e:
-                            if log_callback:
-                                await log_callback(f"스크린샷 읽기 실패(재시도 예정): {e}")
-
-            await asyncio.sleep(interval_sec)
-        except asyncio.CancelledError:
-            return
-        except Exception:
-            await asyncio.sleep(interval_sec)
 
 class BrowserService:
     """
     browser-use + Gemini를 사용해서
     실제 브라우저를 돌려 정책 자격 요건을 검증하는 서비스.
-    - REST Deep Track: verify_policy_sync() (BackgroundTasks 에서 호출)
-    - WebSocket Deep Track: verify_policy_with_agent / verify_policy_with_playwright_shortcut
     """
 
     @staticmethod
@@ -577,11 +776,6 @@ class BrowserService:
         log_callback: AsyncLogCallback = None,
         screenshot_callback: AsyncScreenshotCallback = None,
     ) -> Dict[str, Any]:
-        """
-        browser-use Agent 한 번 실행하고
-        최종 결과를 JSON 형태로 파싱해서 리턴.
-        """
-
         # ✅ 지금 실행 중인 이벤트루프/정책 확인(Windows NotImplementedError 디버깅 핵심)
         try:
             policy_name = type(asyncio.get_event_loop_policy()).__name__
@@ -642,7 +836,6 @@ class BrowserService:
 
             return await asyncio.to_thread(_thread_entry)
 
-        # entry_url 정규화
         if entry_url:
             entry_url = _normalize_url(entry_url)
         if log_callback and entry_url:
@@ -669,12 +862,7 @@ class BrowserService:
         snapshot_failures = 0
 
         max_actions = _env_int("BROWSER_AGENT_MAX_ACTIONS", 20)
-        max_time_sec = float(
-            os.getenv(
-                "BROWSER_MAX_TIME_SEC",
-                os.getenv("BROWSER_AGENT_MAX_TIME_SEC", "300"),
-            )
-        )
+        max_time_sec = float(os.getenv("BROWSER_MAX_TIME_SEC", os.getenv("BROWSER_AGENT_MAX_TIME_SEC", "300")))
 
         allowed_domains_raw = (os.getenv("BROWSER_ALLOWED_DOMAINS", "") or "").strip()
         allowed_domains = [d.strip() for d in allowed_domains_raw.split(",") if d.strip()] or None
@@ -731,11 +919,7 @@ class BrowserService:
         try:
             agent = Agent(**agent_kwargs)
         except TypeError:
-            agent = Agent(
-                task=_normalize_text_for_windows(task),
-                llm=llm,
-                browser=browser,
-            )
+            agent = Agent(task=_normalize_text_for_windows(task), llm=llm, browser=browser)
 
         run_started_at = datetime.now(timezone.utc)
         pre_files = _list_files_safe(downloads_dir)
@@ -752,23 +936,14 @@ class BrowserService:
         old_stdout: Optional[Any] = None
         old_stderr: Optional[Any] = None
         attached_logger_names: List[str] = []
-        # ✅ (추가) 외부 라이브러리 로거 중복 방지용 백업
         saved_logger_handlers: Dict[str, List[logging.Handler]] = {}
         saved_logger_propagate: Dict[str, bool] = {}
 
         def _make_console_single_source(logger_names: List[str]) -> None:
-            """
-            ✅ 콘솔 중복 로그의 근본 원인:
-              - 라이브러리 로거 자체 handler + root handler (propagate=True) 조합
-            해결:
-              - 라이브러리 로거 handlers를 비우고 propagate=True로 root에만 출력되게
-            """
             for lname in logger_names:
                 lg = logging.getLogger(lname)
-                # 백업(나중에 복원)
                 saved_logger_handlers[lname] = list(lg.handlers)
                 saved_logger_propagate[lname] = bool(lg.propagate)
-                # root로만 찍히게
                 lg.handlers = []
                 lg.propagate = True
 
@@ -784,7 +959,6 @@ class BrowserService:
                 except Exception:
                     await asyncio.sleep(0.05)
 
-        # WS 모드에서만 attach
         if log_callback:
             try:
                 loop2 = asyncio.get_running_loop()
@@ -792,15 +966,9 @@ class BrowserService:
                 ws_log_handler.setLevel(logging.INFO)
                 ws_log_handler.setFormatter(logging.Formatter("%(message)s"))
 
-                # 기본은 핵심 로거만 (너무 많은 로그로 프론트 끊김 방지)
-                # 필요하면 환경변수로 root 로깅까지 붙일 수 있게 함
-                # ✅ 기본값을 true로: 어떤 로거로 찍히든 최대한 WS로 흘리기
-                # ✅ 기본값: root에만 WS 핸들러를 붙임(중복 근본 차단)
                 attach_root = _env_flag("BROWSER_WS_ATTACH_ROOT_LOGGER", "true")
-                # ✅ stdio 캡처는 중복의 또 다른 원인이므로 기본 OFF 권장
                 capture_stdio = _env_flag("BROWSER_WS_CAPTURE_STDIO", "false")
 
-                # ✅ browser-use 계열 로거들(콘솔 중복 방지 대상)
                 lib_logger_names = [
                     "Agent",
                     "BrowserSession",
@@ -811,22 +979,15 @@ class BrowserService:
                     "browser_use.browser",
                     "cdp_use",
                 ]
-                # ✅ 콘솔 중복 제거: 라이브러리 로거는 root로만 출력되게 정리
                 if _env_flag("BROWSER_CONSOLE_DEDUP", "true"):
                     _make_console_single_source(lib_logger_names)
 
-                # ✅ WS는 root ONLY 권장
-                if attach_root:
-                    target_logger_names = [""]  # root only
-                else:
-                    # root를 안 붙일 거면, 필요한 로거만 선택적으로 붙이기
-                    target_logger_names = lib_logger_names + ["app.services.browser_service"]
+                target_logger_names = [""] if attach_root else (lib_logger_names + ["app.services.browser_service"])
 
                 for lname in target_logger_names:
                     lg = logging.getLogger(lname)
                     lg.addHandler(ws_log_handler)
                     lg.propagate = True
-                    # 일부 로거가 WARNING 이상으로 잡혀있으면 INFO도 보이도록
                     if lg.level == 0 or lg.level > logging.INFO:
                         lg.setLevel(logging.INFO)
                     attached_logger_names.append(lname)
@@ -839,37 +1000,41 @@ class BrowserService:
                         sys.stdout = _WSStream(loop2, ws_log_queue, prefix="")
                         sys.stderr = _WSStream(loop2, ws_log_queue, prefix="[stderr] ")
                     except Exception as e:
-                        if log_callback:
-                            await log_callback(f"⚠️ stdout/stderr 캡처 설정 실패: {e}")
+                        await log_callback(f"⚠️ stdout/stderr 캡처 설정 실패: {e}")
             except Exception as e:
-                # 로깅 브릿지가 실패해도 agent 자체는 진행
-                if log_callback:
-                    await log_callback(f"⚠️ WS 로그 브릿지 설정 실패: {e}")
+                await log_callback(f"⚠️ WS 로그 브릿지 설정 실패: {e}")
 
         try:
             history = None
             last_err: Optional[Exception] = None
 
-            screenshot_task: Optional[asyncio.Task] = None
+            # ============================================================
+            # ✅ (핵심) 실시간 화면 스트리밍: page.screenshot() 직접 캡처
+            # ============================================================
+            screenshot_task_live: Optional[asyncio.Task] = None
             if screenshot_callback:
-                interval_sec = float(os.getenv("BROWSER_SCREENSHOT_STREAM_INTERVAL_SEC", "0.7"))
-                max_bytes = int(os.getenv("BROWSER_SCREENSHOT_STREAM_MAX_BYTES", "2500000"))
-                screenshot_task = asyncio.create_task(
-                    _pump_latest_screenshot_file(
-                        downloads_dir=downloads_dir,
+                interval_sec = float(os.getenv("BROWSER_LIVE_SHOT_INTERVAL_SEC", "0.5"))
+                jpeg_quality = int(os.getenv("BROWSER_LIVE_SHOT_JPEG_QUALITY", "55"))
+                max_bytes = int(os.getenv("BROWSER_LIVE_SHOT_MAX_BYTES", "900000"))
+                screenshot_task_live = asyncio.create_task(
+                    _pump_live_screenshots(
+                        browser=browser,
                         screenshot_callback=screenshot_callback,
                         log_callback=log_callback,
                         interval_sec=interval_sec,
+                        jpeg_quality=jpeg_quality,
                         max_bytes=max_bytes,
                     )
                 )
+                if log_callback:
+                    await log_callback(
+                        f"[live-shot] enabled interval={interval_sec}s quality={jpeg_quality} max_bytes={max_bytes}"
+                    )
 
             for attempt in range(0, max_retries + 1):
                 try:
                     if attempt > 0 and log_callback:
-                        await log_callback(
-                            f"LLM 오버로드 재시도 중... (attempt={attempt}/{max_retries})"
-                        )
+                        await log_callback(f"LLM 오버로드 재시도 중... (attempt={attempt}/{max_retries})")
 
                     history = await asyncio.wait_for(agent.run(), timeout=max_time_sec)
                     if history is None:
@@ -887,10 +1052,10 @@ class BrowserService:
                             e,
                         )
                         if snapshot_failures >= max_snapshot_failures:
-                            if screenshot_task:
-                                screenshot_task.cancel()
+                            if screenshot_task_live:
+                                screenshot_task_live.cancel()
                                 try:
-                                    await screenshot_task
+                                    await screenshot_task_live
                                 except Exception:
                                     pass
                             return {
@@ -916,19 +1081,16 @@ class BrowserService:
                     last_err = e
                     if _is_overload_error(e) and attempt < max_retries:
                         sleep_s = base_backoff * (2 ** attempt)
-                        logger.warning(
-                            "[BrowserService] LLM overload detected. retry in %.1fs: %s",
-                            sleep_s,
-                            e,
-                        )
+                        logger.warning("[BrowserService] LLM overload detected. retry in %.1fs: %s", sleep_s, e)
                         await asyncio.sleep(sleep_s)
                         continue
                     raise
 
-            if screenshot_task:
-                screenshot_task.cancel()
+            # ✅ 라이브 스크린샷 펌프 종료
+            if screenshot_task_live:
+                screenshot_task_live.cancel()
                 try:
-                    await screenshot_task
+                    await screenshot_task_live
                 except Exception:
                     pass
 
@@ -981,7 +1143,6 @@ class BrowserService:
             }
         finally:
             # ✅ (추가) WS 로그 브릿지 정리
-            # stdout/stderr 원복 (flush도 한 번)
             try:
                 if old_stdout is not None:
                     try:
@@ -997,6 +1158,7 @@ class BrowserService:
                     sys.stderr = old_stderr
             except Exception:
                 pass
+
             if ws_log_pump_task:
                 ws_log_pump_task.cancel()
                 try:
@@ -1010,12 +1172,11 @@ class BrowserService:
                         logging.getLogger(lname).removeHandler(ws_log_handler)
                     except Exception:
                         pass
-                # ✅ 같은 세션에서 재실행 시 중복 핸들러 방지용
                 try:
                     ws_log_handler.close()
                 except Exception:
                     pass
-            # ✅ (추가) 콘솔 dedup을 위해 비워둔 handlers 원복
+
             if saved_logger_handlers:
                 for lname, handlers in saved_logger_handlers.items():
                     try:
@@ -1025,7 +1186,6 @@ class BrowserService:
                     except Exception:
                         pass
 
-            # ✅ GUI로 디버깅/관찰하고 싶으면 창을 닫지 않도록 옵션 제공
             if not keep_open:
                 try:
                     await browser.close()  # type: ignore[attr-defined]
@@ -1085,6 +1245,7 @@ class BrowserService:
             "source_url": parsed.get("source_url")
             or parsed.get("final_url")
             or parsed.get("url")
+            or entry_url
             or None,
             "criteria": parsed.get("criteria") or {},
             "required_documents": parsed.get("required_documents") or [],
@@ -1092,26 +1253,22 @@ class BrowserService:
             "apply_channel": parsed.get("apply_channel"),
             "apply_period": parsed.get("apply_period"),
             "contact": parsed.get("contact") or {},
-            "evidence_text": parsed.get("evidence_text")
-            or parsed.get("evidence")
-            or final_text,
+            "evidence_text": parsed.get("evidence_text") or parsed.get("evidence") or final_text,
             "navigation_path": parsed.get("navigation_path") or [],
             "error_message": parsed.get("error_message"),
             "downloaded_files": downloaded_files,
             "downloads_dir": downloads_dir,
             "image_urls": parsed.get("image_urls") or [],
             "confidence": float(parsed.get("confidence") or 0.0),
-            "needs_review": bool(parsed.get("needs_review"))
-            if "needs_review" in parsed
-            else False,
+            "needs_review": bool(parsed.get("needs_review")) if "needs_review" in parsed else False,
         }
 
         if not isinstance(result["navigation_path"], list):
             result["navigation_path"] = []
         if len(result["navigation_path"]) == 0:
-            result["navigation_path_warning"] = (
-                "Agent did not record any navigation_path (empty list)"
-            )
+            result["navigation_path_warning"] = "Agent did not record any navigation_path (empty list)"
+            if entry_url:
+                result["navigation_path"] = [{"action": "open", "label": "start", "url": entry_url, "note": "entry"}]
 
         result = _repair_result(result)
 
@@ -1159,6 +1316,32 @@ class BrowserService:
             return obj if isinstance(obj, dict) else {"raw": text}
         except Exception:
             pass
+
+        low = (text or "").lower()
+        if any(h in low for h in _NOT_FOUND_HINTS) or any(h.lower() in low for h in _JUDGE_FAIL_HINTS):
+            return {
+                "matched": False,
+                "matched_title": None,
+                "source_url": None,
+                "criteria": {
+                    "age": "제한 없음",
+                    "region": "제한 없음",
+                    "income": "제한 없음",
+                    "employment": "제한 없음",
+                    "other": "없음",
+                },
+                "required_documents": [],
+                "apply_steps": [],
+                "apply_channel": None,
+                "apply_period": None,
+                "contact": {},
+                "evidence_text": text,
+                "navigation_path": [],
+                "error_message": "POLICY_NOT_FOUND",
+                "image_urls": [],
+                "confidence": 0.0,
+                "needs_review": False,
+            }
 
         m = re.search(r"```(?:json)?\s*(\{[\s\S]*\})\s*```", text, re.IGNORECASE)
         if m:

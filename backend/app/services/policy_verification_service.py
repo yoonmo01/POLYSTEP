@@ -55,6 +55,10 @@ class PolicyVerificationService:
         needs_review = bool(result.get("needs_review"))
         err = (result.get("error_message") or "").strip()
 
+        # ✅ (추가) browser_service 휴리스틱으로 '정책 못 찾음'이 들어온 케이스
+        if err == "POLICY_NOT_FOUND":
+            return (PolicyVerificationStatus.FAILED.value, "policy not found on the provided site (POLICY_NOT_FOUND)")
+
         # ✅ 명시적 성공 조건: matched == True AND needs_review == False AND error 없음
         if matched is True and (not needs_review) and (not err):
             return (PolicyVerificationStatus.SUCCESS.value, "")
