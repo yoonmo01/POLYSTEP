@@ -7,7 +7,8 @@ from app.db import SessionLocal
 from app.models import Scholarship
 
 # ✅ CSV 파일 경로 (프로젝트에 맞게 바꿔도 됨)
-CSV_PATH = Path(__file__).resolve().parents[3] / "scholarship.csv"
+DATA_DIR = Path(__file__).resolve().parents[3] / "data"
+CSV_PATH = DATA_DIR / "scholarship.csv"
 
 # ✅ 출처 URL(원하면 나중에 Scholarship 테이블에 저장됨)
 SOURCE_URL = "https://www.hallym.ac.kr/hallym/1112/subview.do"

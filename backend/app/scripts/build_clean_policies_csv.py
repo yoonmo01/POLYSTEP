@@ -2,7 +2,7 @@
 # import re
 
 # INPUT_FILE = "youth_policies_ui_clean.csv"
-# OUTPUT_FILE = "policies_cleaned_final.csv"
+# OUTPUT_FILE = DATA_DIR / "policies_cleaned_final.csv"
 
 
 # # 모집기간 코드 → 한글 라벨 매핑
@@ -199,10 +199,12 @@
 #     main()
 
 import pandas as pd
+from pathlib import Path
 import re
 
-INPUT_FILE = "C:/POLYSTEP/youth_policies_gangwon_only_ui_clean.csv"
-OUTPUT_FILE = "C:/POLYSTEP/policies_cleaned_final_gangwon_only.csv"
+INPUT_FILE = str(DATA_DIR / "youth_policies_gangwon_only_ui_clean.csv")
+DATA_DIR = Path(__file__).resolve().parents[3] / "data"
+OUTPUT_FILE = str(DATA_DIR / "policies_cleaned_final_gangwon_only.csv")
 
 # 모집기간 코드 → 한글 라벨 매핑 (digits 기준)
 APPLY_PERIOD_MAP = {

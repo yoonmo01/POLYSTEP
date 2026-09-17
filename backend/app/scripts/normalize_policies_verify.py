@@ -1,6 +1,6 @@
 # import pandas as pd
 
-# FILE_PATH = "C:/POLYSTEP/youth_policies_enriched.csv"
+# FILE_PATH = str(DATA_DIR / "youth_policies_enriched.csv")
 
 # def main():
 #     print("🔍 Loading file...")
@@ -72,8 +72,10 @@
 #     print(dup[["plcyNo", "plcyNm", "sido_name"]].head(20))
 
 import pandas as pd
+from pathlib import Path
 
-FILE_PATH = "C:/POLYSTEP/youth_policies_gangwon_enriched.csv"
+DATA_DIR = Path(__file__).resolve().parents[3] / "data"
+FILE_PATH = str(DATA_DIR / "youth_policies_gangwon_enriched.csv")
 
 def main():
     print("🔍 Loading file...")

@@ -62,11 +62,13 @@
 #     main()
 
 import pandas as pd
+from pathlib import Path
 from datetime import datetime
 import re
 
-INPUT_FILE = "C:/POLYSTEP/youth_policies_gangwon_enriched.csv"
-OUTPUT_FILE = "C:/POLYSTEP/youth_policies_gangwon_only_ui_clean.csv"
+DATA_DIR = Path(__file__).resolve().parents[3] / "data"
+INPUT_FILE = str(DATA_DIR / "youth_policies_gangwon_enriched.csv")
+OUTPUT_FILE = str(DATA_DIR / "youth_policies_gangwon_only_ui_clean.csv")
 
 # 온통청년 신청기간 구분 코드: 숫자만 뽑으면 57002 / 57001 같은 형태가 됨
 ALWAYS_OPEN_DIGITS = {"57002"}  # 상시모집

@@ -1,7 +1,9 @@
 import pandas as pd
+from pathlib import Path
 import re
 
-FILE = "C:/POLYSTEP/policies_cleaned_final_gangwon_only.csv"
+DATA_DIR = Path(__file__).resolve().parents[3] / "data"
+FILE = str(DATA_DIR / "policies_cleaned_final_gangwon_only.csv")
 
 MARRIAGE_MAP = {
     "55001": "미혼",

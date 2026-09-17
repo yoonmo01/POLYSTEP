@@ -92,8 +92,8 @@
 
 # def main():
 #     # 0. 원본 데이터 읽기 (파일명은 네 파일명에 맞게 변경)
-#     input_path = "C:/POLYSTEP/youth_policies_seoul_gyeonggi_alive.csv"
-#     output_path = "C:/POLYSTEP/youth_policies_enriched.csv"
+#     input_path = str(DATA_DIR / "youth_policies_seoul_gyeonggi_alive.csv")
+#     output_path = str(DATA_DIR / "youth_policies_enriched.csv")
 
 #     df = pd.read_csv(input_path, encoding="utf-8-sig")
 
@@ -129,12 +129,14 @@
 
 
 import pandas as pd
+from pathlib import Path
 
 # =========================
 # 설정
 # =========================
-INPUT_PATH = "C:/POLYSTEP/youth_policies_gangwon_alive.csv"
-OUTPUT_PATH = "C:/POLYSTEP/youth_policies_gangwon_enriched.csv"
+DATA_DIR = Path(__file__).resolve().parents[3] / "data"
+INPUT_PATH = str(DATA_DIR / "youth_policies_gangwon_alive.csv")
+OUTPUT_PATH = str(DATA_DIR / "youth_policies_gangwon_enriched.csv")
 
 GANGWON_PREFIX_2 = "51"  # ✅ 강원특별자치도 zip 앞 2자리
 

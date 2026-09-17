@@ -6,7 +6,7 @@
 # from app.db import SessionLocal
 # from app.models import Policy
 
-# CSV_PATH = BASE_DIR / "policies_cleaned_final.csv"  # 🔥 필요하면 경로 수정
+# CSV_PATH = DATA_DIR / "policies_cleaned_final.csv"  # 🔥 필요하면 경로 수정
 
 
 # def clean_ymd(value: Any) -> Optional[str]:
@@ -213,7 +213,8 @@ from app.db import SessionLocal
 from app.models import Policy
 
 # ✅ 강원도 전용 CSV
-CSV_PATH = str(Path(__file__).resolve().parents[3] / "policies_cleaned_final_gangwon_only.csv")
+DATA_DIR = Path(__file__).resolve().parents[3] / "data"
+CSV_PATH = str(DATA_DIR / "policies_cleaned_final_gangwon_only.csv")
 
 
 def clean_ymd(value: Any) -> Optional[str]:

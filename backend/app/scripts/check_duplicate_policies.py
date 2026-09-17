@@ -1,8 +1,10 @@
 import pandas as pd
+from pathlib import Path
 
-# === 파일 경로만 네 환경에 맞게 수정 ===
-FILE_GANGWON_ONLY = "C:/POLYSTEP/policies_cleaned_final_gangwon_only.csv"
-FILE_MAIN = "C:/POLYSTEP/policies_cleaned_final.csv"  # (서울/경기 등 기존 파일)
+# === 데이터 파일 위치 (레포 루트의 docs/) ===
+DATA_DIR = Path(__file__).resolve().parents[3] / "data"
+FILE_GANGWON_ONLY = str(DATA_DIR / "policies_cleaned_final_gangwon_only.csv")
+FILE_MAIN = str(DATA_DIR / "policies_cleaned_final.csv")  # (서울/경기 등 기존 파일)
 
 def load_csv(path: str) -> pd.DataFrame:
     return pd.read_csv(path, encoding="utf-8-sig")
@@ -88,7 +90,7 @@ def main():
     print(f"- merged 총 행 수: {len(merged)} (main {len(df_main)} + add {len(df_gw_dedup)})")
 
     # 필요하면 저장 (원하면 주석 해제)
-    # OUT_PATH = "C:/POLYSTEP/policies_cleaned_final_merged_dedup.csv"
+    # OUT_PATH = str(DATA_DIR / "policies_cleaned_final_merged_dedup.csv")
     # merged.to_csv(OUT_PATH, encoding="utf-8-sig", index=False)
     # print(f"💾 저장 완료: {OUT_PATH}")
 
