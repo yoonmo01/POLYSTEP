@@ -933,8 +933,8 @@ class BrowserService:
         # ============================================================
         async def _create_browser(headless_value: bool) -> Any:
             try:
-                default_pw_chrome = "/home/ubuntu/.cache/ms-playwright/chromium-1200/chrome-linux64/chrome"
-                browser_exec_path = (os.getenv("BROWSER_EXECUTABLE_PATH", "") or "").strip() or default_pw_chrome
+                # 미지정 시 Playwright가 설치한 번들 Chromium을 자동으로 찾는다
+                browser_exec_path = (os.getenv("BROWSER_EXECUTABLE_PATH", "") or "").strip() or None
 
                 server_args = [
                     "--no-sandbox",
@@ -963,9 +963,9 @@ class BrowserService:
                 init_kwargs = _build_kwargs_for_callable(Browser.__init__, desired_kwargs)
                 b = Browser(**init_kwargs)
 
-                logger.info("[BrowserService] Using browser executable: %s", browser_exec_path)
+                logger.info("[BrowserService] Using browser executable: %s", browser_exec_path or "(Playwright 기본)")
                 if log_callback:
-                    await log_callback(f"✅ browser executable_path: {browser_exec_path}")
+                    await log_callback(f"✅ browser executable_path: {browser_exec_path or '(Playwright 기본)'}")
                     await log_callback(f"✅ headless={headless_value} chromium_sandbox={chromium_sandbox} keep_alive={keep_open}")
                 return b
             except Exception as e:
